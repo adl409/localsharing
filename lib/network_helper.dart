@@ -13,6 +13,8 @@ class NetworkHelper {
 
   Stream<List<String>> get devicesStream => _devicesController.stream;
 
+  List<String> devices = []; // List to store discovered devices
+
   Future<void> startMulticasting() async {
     try {
       _socket = await RawDatagramSocket.bind(
@@ -50,23 +52,13 @@ class NetworkHelper {
       if (datagram != null) {
         String message = String.fromCharCodes(datagram.data);
         if (message.trim() == 'RESPONSE') {
-          _devicesController.add([datagram.address.address]);
+          String deviceAddress = datagram.address.address;
+          if (!devices.contains(deviceAddress)) {
+            devices.add(deviceAddress);
+            _devicesController.add(devices);
+          }
         }
       }
     }
   }
-}
-
-void main() async {
-  NetworkHelper networkHelper = NetworkHelper();
-
-  networkHelper.devicesStream.listen((List<String> devices) {
-    print('Found device(s): $devices');
-  });
-
-  await networkHelper.startMulticasting();
-
-  // Uncomment to stop multicasting after 30 seconds
-  // await Future.delayed(Duration(seconds: 30));
-  // networkHelper.stopMulticasting();
 }

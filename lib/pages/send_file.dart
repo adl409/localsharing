@@ -1,5 +1,3 @@
-// ignore_for_file: depend_on_referenced_packages
-
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
@@ -11,15 +9,6 @@ class SendFilePage extends StatefulWidget {
 }
 
 class _SendFilePageState extends State<SendFilePage> {
-  final List<String> devices = [
-    "Device 1",
-    "Device 2",
-    "Device 3",
-    "Device 4",
-    "Device 5"
-  ]; // Sample device names
-
-  String selectionMode = 'Single Device'; // To keep track of selection mode
   String? fileName; // To store the selected file name
 
   NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
@@ -34,11 +23,6 @@ class _SendFilePageState extends State<SendFilePage> {
   void dispose() {
     networkHelper.stopMulticasting(); // Stop multicasting when page is disposed
     super.dispose();
-  }
-
-  void reloadDevices() {
-    // TODO: Implement device reloading logic
-    print('Devices reloaded');
   }
 
   void selectFile() async {
@@ -116,32 +100,6 @@ class _SendFilePageState extends State<SendFilePage> {
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const Icon(Icons.arrow_drop_down),
-                        const SizedBox(width: 10),
-                        DropdownButton<String>(
-                          value: selectionMode,
-                          onChanged: (String? newValue) {
-                            setState(() {
-                              selectionMode = newValue!;
-                            });
-                          },
-                          items: <String>['Single Device', 'Multiple Devices']
-                              .map<DropdownMenuItem<String>>((String value) {
-                            return DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            );
-                          }).toList(),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.refresh),
-                          onPressed: reloadDevices,
-                        ),
-                      ],
                     ),
                     const SizedBox(height: 10),
                     Expanded(
