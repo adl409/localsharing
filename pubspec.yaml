@@ -16,6 +16,7 @@ dependencies:
   flutter_nearby_connections: ^1.1.2
   refena_flutter: ^2.1.1
   desktop_drop: ^0.4.4
+  logger: ^2.3.0
 
 dev_dependencies:
   flutter_test:

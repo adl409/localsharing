@@ -54,7 +54,7 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Receive File'),
+        title: Text('Receive File'),
       ),
       body: Center(
         child: Column(
@@ -64,16 +64,16 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
                 ? Text(
                     'IP Address: $ipAddress\nPort: $port',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 18),
+                    style: TextStyle(fontSize: 18),
                   )
-                : const CircularProgressIndicator(),
-            const SizedBox(height: 20),
-            const Text(
+                : CircularProgressIndicator(),
+            SizedBox(height: 20),
+            Text(
               'Waiting for files...',
               style: TextStyle(fontSize: 18),
             ),
-            const SizedBox(height: 20),
-            const CircularProgressIndicator(),
+            SizedBox(height: 20),
+            CircularProgressIndicator(),
           ],
         ),
       ),

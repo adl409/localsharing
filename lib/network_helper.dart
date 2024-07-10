@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:logger/logger.dart';
 import 'package:path/path.dart' as path;
 
 class NetworkHelper {
@@ -14,6 +16,8 @@ class NetworkHelper {
 
   List<String> devices = []; // List to store discovered devices
 
+  Logger logger = Logger();
+
   Future<void> startMulticasting() async {
     try {
       _socket = await RawDatagramSocket.bind(
@@ -21,11 +25,19 @@ class NetworkHelper {
         port,
         reuseAddress: true,
       );
+      
+      // Join the multicast group
+      _socket!.joinMulticast(InternetAddress(multicastAddress));
+      
       _socket!.listen(handleData);
       _isClosed = false;
       _sendDiscoveryPacket();
+      
+      logger.i('Multicasting started successfully');
     } catch (e) {
-      print('Error starting multicast: $e');
+      logger.e('Error starting multicast: $e');
+      _socket?.close();
+      _isClosed = true;
     }
   }
 
@@ -33,6 +45,7 @@ class NetworkHelper {
     _isClosed = true;
     _socket?.close();
     _devicesController.close();
+    logger.i('Multicasting stopped');
   }
 
   void _sendDiscoveryPacket() {
@@ -40,7 +53,14 @@ class NetworkHelper {
       if (_isClosed) {
         timer.cancel();
       } else {
-        _socket!.send('DISCOVER'.codeUnits, InternetAddress(multicastAddress), port);
+        try {
+          // Convert String 'DISCOVER' to Uint8List and send multicast packet
+          Uint8List data = Uint8List.fromList('DISCOVER'.codeUnits);
+          _socket!.send(data, InternetAddress(multicastAddress), port);
+          logger.d('Sent multicast DISCOVER');
+        } catch (e) {
+          logger.e('Error sending multicast packet: $e');
+        }
       }
     });
   }
@@ -50,11 +70,13 @@ class NetworkHelper {
       Datagram? datagram = _socket!.receive();
       if (datagram != null) {
         String message = String.fromCharCodes(datagram.data);
+        logger.d('Received message: $message from ${datagram.address}');
         if (message.trim() == 'RESPONSE') {
           String deviceAddress = datagram.address.address;
           if (!devices.contains(deviceAddress)) {
             devices.add(deviceAddress);
-            _devicesController.add(devices);
+            _devicesController.add(devices.toList()); // Notify listeners
+            logger.i('Added device: $deviceAddress');
           }
         }
       }
@@ -65,7 +87,7 @@ class NetworkHelper {
     try {
       // Open a TCP socket to the selected device
       final socket = await Socket.connect(deviceAddress, port);
-      print('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
+      logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
 
       // Send the file name and size first
       final fileName = path.basename(file.path);
@@ -81,9 +103,9 @@ class NetworkHelper {
 
       // Close the socket connection
       await socket.close();
-      print('File sent successfully');
+      logger.i('File sent successfully');
     } catch (e) {
-      print('Error sending file: $e');
+      logger.e('Error sending file: $e');
       throw e;
     }
   }
@@ -94,7 +116,7 @@ class NetworkHelper {
     try {
       _serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
       _serverSocket!.listen((Socket client) async {
-        print('Connection from ${client.remoteAddress.address}:${client.remotePort}');
+        logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
 
         // Receive the file name and size
         List<int> data = [];
@@ -121,16 +143,16 @@ class NetworkHelper {
 
         await fileSink.close();
         await client.close();
-        print('File received: $filePath');
+        logger.i('File received: $filePath');
       });
     } catch (e) {
-      print('Error starting server: $e');
+      logger.e('Error starting server: $e');
     }
   }
 
   void stopReceiving() {
     _serverSocket?.close();
     _serverSocket = null;
-    print('Stopped receiving files');
+    logger.i('Stopped receiving files');
   }
 }
