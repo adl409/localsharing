@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:logger/logger.dart';
 import 'package:path/path.dart' as path;
+import 'package:network_info_plus/network_info_plus.dart';
 
 class NetworkHelper {
   static const String multicastAddress = '239.10.10.10';
@@ -17,9 +19,14 @@ class NetworkHelper {
   List<String> devices = []; // List to store discovered devices
 
   Logger logger = Logger();
+  final NetworkInfo _networkInfo = NetworkInfo();
 
   Future<void> startMulticasting() async {
     try {
+      String? wifiIP = await _networkInfo.getWifiIP();
+      String? wifiName = await _networkInfo.getWifiName();
+      logger.i('WiFi Name: $wifiName, IP: $wifiIP');
+
       _socket = await RawDatagramSocket.bind(
         InternetAddress.anyIPv4,
         port,
@@ -112,7 +119,21 @@ class NetworkHelper {
 
   ServerSocket? _serverSocket;
 
-  Future<void> startReceiving(String savePath) async {
+  Future<String?> pickSaveDirectory() async {
+    String? directoryPath = await FilePicker.platform.getDirectoryPath();
+    if (directoryPath == null) {
+      logger.w('Directory selection was canceled');
+    }
+    return directoryPath;
+  }
+
+  Future<void> startReceiving([String? s]) async {
+    String? savePath = await pickSaveDirectory();
+    if (savePath == null) {
+      logger.w('No directory selected for saving received files');
+      return;
+    }
+
     try {
       _serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
       _serverSocket!.listen((Socket client) async {

@@ -13,7 +13,6 @@ class _SendFilePageState extends State<SendFilePage> {
   String? fileName; // To store the selected file name
   File? selectedFile; // To store the selected file
   String? selectedDevice; // To store the selected device
-  String myDeviceName = 'My Device'; // Your device name
 
   NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
 
@@ -121,10 +120,6 @@ class _SendFilePageState extends State<SendFilePage> {
                         builder: (context, snapshot) {
                           if (snapshot.hasData) {
                             List<String> discoveredDevices = snapshot.data!;
-                            // Add your device name to the list
-                            if (!discoveredDevices.contains(myDeviceName)) {
-                              discoveredDevices.add(myDeviceName);
-                            }
                             return ListView.builder(
                               itemCount: discoveredDevices.length,
                               itemBuilder: (context, index) {

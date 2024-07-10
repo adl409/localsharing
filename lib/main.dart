@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_const_constructors
+
 import 'package:flutter/material.dart';
 import 'pages/send_file.dart';
 import 'pages/receive_file.dart';
@@ -27,33 +29,46 @@ class MainPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Main Page'),
+        title: const Text('File Sharing App'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(32.0),
-        child: SizedBox(
-          width: 200, // Fixed width for the ListView
-          child: ListView.builder(
-            itemCount: menuItems.length,
-            itemBuilder: (context, index) {
-              return NavigationButton(
-                title: menuItems[index],
-                onPressed: () {
-                  if (index == 0) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => ReceiveFilePage()),
-                    );
-                  } else if (index == 1) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => SendFilePage()),
-                    );
-                  }
+        child: Row(
+          children: <Widget>[
+            SizedBox(
+              width: 200, // Fixed width for the ListView
+              child: ListView.builder(
+                itemCount: menuItems.length,
+                itemBuilder: (context, index) {
+                  return NavigationButton(
+                    title: menuItems[index],
+                    onPressed: () {
+                      if (index == 0) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => ReceiveFilePage()),
+                        );
+                      } else if (index == 1) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => SendFilePage()),
+                        );
+                      }
+                    },
+                  );
                 },
-              );
-            },
-          ),
+              ),
+            ),
+            SizedBox(width: 32), // Add some spacing between the ListView and the text
+            Expanded(
+              child: Center(
+                child: Text(
+                  'File Sharing App',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -78,15 +93,13 @@ class NavigationButton extends StatelessWidget {
         child: ElevatedButton(
           onPressed: onPressed,
           style: ElevatedButton.styleFrom(
-            foregroundColor: Colors.white, padding: EdgeInsets.symmetric(vertical: 12, horizontal: 20), backgroundColor: Colors.blue,
-            textStyle: TextStyle(fontSize: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            minimumSize: const Size(200, 50),
+            textStyle: const TextStyle(fontSize: 18),
+            padding: const EdgeInsets.symmetric(vertical: 10),
           ),
           child: Text(
             title,
-            style: TextStyle(fontSize: 14),
+            style: TextStyle(fontSize: 18),
           ),
         ),
       ),

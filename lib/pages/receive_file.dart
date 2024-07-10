@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
+import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 
 class ReceiveFilePage extends StatefulWidget {
@@ -11,12 +11,12 @@ class ReceiveFilePage extends StatefulWidget {
 class _ReceiveFilePageState extends State<ReceiveFilePage> {
   NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
   String? ipAddress;
+  String? saveDirectory;
   static const int port = 5555; // Same port as in NetworkHelper
 
   @override
   void initState() {
     super.initState();
-    _startReceivingFiles();
     _getIpAddress();
   }
 
@@ -24,13 +24,6 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
   void dispose() {
     networkHelper.stopReceiving();
     super.dispose();
-  }
-
-  Future<void> _startReceivingFiles() async {
-    Directory appDocDir = await getApplicationDocumentsDirectory();
-    String savePath = appDocDir.path;
-    networkHelper.startReceiving(savePath);
-    print('Started receiving files, saving to $savePath');
   }
 
   Future<void> _getIpAddress() async {
@@ -47,6 +40,19 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
       }
     } catch (e) {
       print('Failed to get IP address: $e');
+    }
+  }
+
+  Future<void> _pickSaveDirectory() async {
+    String? directoryPath = await FilePicker.platform.getDirectoryPath();
+    if (directoryPath != null) {
+      setState(() {
+        saveDirectory = directoryPath;
+      });
+      networkHelper.startReceiving(saveDirectory!);
+      print('Started receiving files, saving to $saveDirectory');
+    } else {
+      print('No directory selected');
     }
   }
 
@@ -68,12 +74,26 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
                   )
                 : CircularProgressIndicator(),
             SizedBox(height: 20),
-            Text(
-              'Waiting for files...',
-              style: TextStyle(fontSize: 18),
-            ),
+            saveDirectory != null
+                ? Text(
+                    'Saving to: $saveDirectory',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 18),
+                  )
+                : ElevatedButton(
+                    onPressed: _pickSaveDirectory,
+                    child: Text('Select Save Directory'),
+                  ),
             SizedBox(height: 20),
-            CircularProgressIndicator(),
+            saveDirectory != null
+                ? Text(
+                    'Waiting for files...',
+                    style: TextStyle(fontSize: 18),
+                  )
+                : Container(),
+            saveDirectory != null
+                ? CircularProgressIndicator()
+                : Container(),
           ],
         ),
       ),
