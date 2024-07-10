@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
+import 'dart:io';
 import 'package:local_file_sharing/network_helper.dart';
 
 class SendFilePage extends StatefulWidget {
@@ -10,6 +11,8 @@ class SendFilePage extends StatefulWidget {
 
 class _SendFilePageState extends State<SendFilePage> {
   String? fileName; // To store the selected file name
+  File? selectedFile; // To store the selected file
+  String? selectedDevice; // To store the selected device
 
   NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
 
@@ -28,8 +31,9 @@ class _SendFilePageState extends State<SendFilePage> {
   void selectFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles();
 
-    if(result != null) {
+    if (result != null) {
       setState(() {
+        selectedFile = File(result.files.single.path!);
         fileName = path.basename(result.files.single.path!);
       });
     } else {
@@ -37,9 +41,17 @@ class _SendFilePageState extends State<SendFilePage> {
     }
   }
 
-  void sendFile() {
-    // TODO: Implement file sending
-    print('File sent: $fileName');
+  void sendFile() async {
+    if (selectedFile != null && selectedDevice != null) {
+      try {
+        await networkHelper.sendFile(selectedFile!, selectedDevice!);
+        print('File sent: $fileName to $selectedDevice');
+      } catch (e) {
+        print('Failed to send file: $e');
+      }
+    } else {
+      print('File or device not selected');
+    }
   }
 
   @override
@@ -117,7 +129,9 @@ class _SendFilePageState extends State<SendFilePage> {
                                     leading: const Icon(Icons.devices),
                                     title: Text(discoveredDevices[index]),
                                     onTap: () {
-                                      // TODO: Implement device selection
+                                      setState(() {
+                                        selectedDevice = discoveredDevices[index];
+                                      });
                                       print('Device selected: ${discoveredDevices[index]}');
                                     },
                                   ),
