@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io';
-import 'package:local_file_sharing/network_helper.dart';
+import 'package:local_file_sharing/network_helper.dart'; // Make sure this path is correct
 
 class SendFilePage extends StatefulWidget {
   @override

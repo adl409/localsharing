@@ -72,6 +72,24 @@ class NetworkHelper {
     });
   }
 
+  void listenForDiscovery() async {
+  RawDatagramSocket.bind(InternetAddress.anyIPv4, 5555).then((socket) {
+    socket.joinMulticast(InternetAddress('239.10.10.10'));
+    socket.listen((RawSocketEvent event) {
+      if (event == RawSocketEvent.read) {
+        Datagram? datagram = socket.receive();
+        if (datagram != null) {
+          String message = String.fromCharCodes(datagram.data);
+          if (message == 'DISCOVER') {
+            socket.send(Uint8List.fromList('RESPONSE'.codeUnits), datagram.address, datagram.port);
+          }
+        }
+      }
+    });
+  });
+}
+
+
   void handleData(RawSocketEvent event) {
     if (event == RawSocketEvent.read) {
       Datagram? datagram = _socket!.receive();
