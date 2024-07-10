@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
@@ -7,7 +8,7 @@ import 'package:path/path.dart' as path;
 import 'package:network_info_plus/network_info_plus.dart';
 
 class NetworkHelper {
-  static const String multicastAddress = '239.10.10.10';
+  static const String multicastAddress = '239.0.0.0';
   static const int port = 5555;
 
   RawDatagramSocket? _socket;
@@ -21,33 +22,33 @@ class NetworkHelper {
   Logger logger = Logger();
   final NetworkInfo _networkInfo = NetworkInfo();
 
- Future<void> startMulticasting() async {
-  try {
-    String? wifiIP = await _networkInfo.getWifiIP();
-    String? wifiName = await _networkInfo.getWifiName();
-    logger.i('WiFi Name: $wifiName, IP: $wifiIP');
+  Future<void> startMulticasting() async {
+    try {
+      String? wifiIP = await _networkInfo.getWifiIP();
+      String? wifiName = await _networkInfo.getWifiName();
+      logger.i('WiFi Name: $wifiName, IP: $wifiIP');
 
-    _socket = await RawDatagramSocket.bind(
-      InternetAddress.anyIPv4,
-      port,
-      reuseAddress: true,
-    );
-    
-    // Join the multicast group
-    _socket!.joinMulticast(InternetAddress(multicastAddress));
-    logger.i('Joined multicast group $multicastAddress');
-    
-    _socket!.listen(handleData);
-    _isClosed = false;
-    _sendDiscoveryPacket();
-    
-    logger.i('Multicasting started successfully');
-  } catch (e) {
-    logger.e('Error starting multicast: $e');
-    _socket?.close();
-    _isClosed = true;
+      _socket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        port,
+        reuseAddress: true,
+      );
+
+      // Join the multicast group
+      _socket!.joinMulticast(InternetAddress(multicastAddress));
+      logger.i('Joined multicast group $multicastAddress');
+
+      _socket!.listen(handleData);
+      _isClosed = false;
+      _sendDiscoveryPacket();
+
+      logger.i('Multicasting started successfully');
+    } catch (e) {
+      logger.e('Error starting multicast: $e');
+      _socket?.close();
+      _isClosed = true;
+    }
   }
-}
 
   void stopMulticasting() {
     _isClosed = true;
@@ -63,9 +64,9 @@ class NetworkHelper {
       } else {
         try {
           // Convert String 'DISCOVER' to Uint8List and send multicast packet
-          Uint8List data = Uint8List.fromList('DISCOVER'.codeUnits);
+          Uint8List data = Uint8List.fromList('RESPONSE'.codeUnits);
           _socket!.send(data, InternetAddress(multicastAddress), port);
-          logger.d('Sent multicast DISCOVER');
+          logger.d('Sent multicast RESPONSE');
         } catch (e) {
           logger.e('Error sending multicast packet: $e');
         }
@@ -74,20 +75,32 @@ class NetworkHelper {
   }
 
   void listenForDiscovery() async {
-    RawDatagramSocket.bind(InternetAddress.anyIPv4, 5555).then((socket) {
-      socket.joinMulticast(InternetAddress('239.10.10.10'));
-      socket.listen((RawSocketEvent event) {
-        if (event == RawSocketEvent.read) {
-          Datagram? datagram = socket.receive();
-          if (datagram != null) {
-            String message = String.fromCharCodes(datagram.data);
-            if (message == 'DISCOVER') {
-              socket.send(Uint8List.fromList('RESPONSE'.codeUnits), datagram.address, datagram.port);
+    try {
+      logger.i('Starting discovery listener...');
+      RawDatagramSocket.bind(InternetAddress.anyIPv4, port).then((socket) {
+        _socket = socket;
+        logger.i('Socket bound to ${socket.address.address}:${socket.port}');
+
+        socket.joinMulticast(InternetAddress(multicastAddress));
+        logger.i('Joined multicast group $multicastAddress');
+
+        socket.listen((RawSocketEvent event) {
+          if (event == RawSocketEvent.read) {
+            Datagram? datagram = socket.receive();
+            if (datagram != null) {
+              String message = String.fromCharCodes(datagram.data);
+              logger.d('Received discovery message: $message from ${datagram.address}');
+              if (message.trim() == 'RESPONSE') {
+                socket.send(Uint8List.fromList('RESPONSE'.codeUnits), datagram.address, datagram.port);
+                logger.d('Sent RESPONSE to ${datagram.address}');
+              }
             }
           }
-        }
+        });
       });
-    });
+    } catch (e) {
+      logger.e('Error listening for discovery: $e');
+    }
   }
 
 void handleData(RawSocketEvent event) {
@@ -96,7 +109,6 @@ void handleData(RawSocketEvent event) {
     if (datagram != null) {
       String message = String.fromCharCodes(datagram.data);
       logger.d('Received message: $message from ${datagram.address}');
-
       if (message.trim() == 'RESPONSE') {
         String deviceAddress = datagram.address.address;
         if (!devices.contains(deviceAddress)) {
@@ -106,18 +118,17 @@ void handleData(RawSocketEvent event) {
         } else {
           logger.d('Device $deviceAddress already in list');
         }
-      } else if (message.trim() == 'DISCOVER') {
-        logger.d('Received DISCOVER, sending RESPONSE');
-        Uint8List responseData = Uint8List.fromList('RESPONSE'.codeUnits);
-        _socket!.send(responseData, datagram.address, datagram.port);
       } else {
-        logger.d('Unknown message: $message');
+        logger.d('Message is not a RESPONSE: $message');
       }
     } else {
       logger.d('Datagram is null');
     }
+  } else if (event == RawSocketEvent.write) {
+    logger.d('Socket is trying to write, but this handler is for read events.');
+    // Handle write event if necessary
   } else {
-    logger.d('Event is not a read event: $event');
+    logger.d('Unhandled event type: $event');
   }
 }
 
