@@ -21,32 +21,33 @@ class NetworkHelper {
   Logger logger = Logger();
   final NetworkInfo _networkInfo = NetworkInfo();
 
-  Future<void> startMulticasting() async {
-    try {
-      String? wifiIP = await _networkInfo.getWifiIP();
-      String? wifiName = await _networkInfo.getWifiName();
-      logger.i('WiFi Name: $wifiName, IP: $wifiIP');
+ Future<void> startMulticasting() async {
+  try {
+    String? wifiIP = await _networkInfo.getWifiIP();
+    String? wifiName = await _networkInfo.getWifiName();
+    logger.i('WiFi Name: $wifiName, IP: $wifiIP');
 
-      _socket = await RawDatagramSocket.bind(
-        InternetAddress.anyIPv4,
-        port,
-        reuseAddress: true,
-      );
-      
-      // Join the multicast group
-      _socket!.joinMulticast(InternetAddress(multicastAddress));
-      
-      _socket!.listen(handleData);
-      _isClosed = false;
-      _sendDiscoveryPacket();
-      
-      logger.i('Multicasting started successfully');
-    } catch (e) {
-      logger.e('Error starting multicast: $e');
-      _socket?.close();
-      _isClosed = true;
-    }
+    _socket = await RawDatagramSocket.bind(
+      InternetAddress.anyIPv4,
+      port,
+      reuseAddress: true,
+    );
+    
+    // Join the multicast group
+    _socket!.joinMulticast(InternetAddress(multicastAddress));
+    logger.i('Joined multicast group $multicastAddress');
+    
+    _socket!.listen(handleData);
+    _isClosed = false;
+    _sendDiscoveryPacket();
+    
+    logger.i('Multicasting started successfully');
+  } catch (e) {
+    logger.e('Error starting multicast: $e');
+    _socket?.close();
+    _isClosed = true;
   }
+}
 
   void stopMulticasting() {
     _isClosed = true;
@@ -73,40 +74,53 @@ class NetworkHelper {
   }
 
   void listenForDiscovery() async {
-  RawDatagramSocket.bind(InternetAddress.anyIPv4, 5555).then((socket) {
-    socket.joinMulticast(InternetAddress('239.10.10.10'));
-    socket.listen((RawSocketEvent event) {
-      if (event == RawSocketEvent.read) {
-        Datagram? datagram = socket.receive();
-        if (datagram != null) {
-          String message = String.fromCharCodes(datagram.data);
-          if (message == 'DISCOVER') {
-            socket.send(Uint8List.fromList('RESPONSE'.codeUnits), datagram.address, datagram.port);
+    RawDatagramSocket.bind(InternetAddress.anyIPv4, 5555).then((socket) {
+      socket.joinMulticast(InternetAddress('239.10.10.10'));
+      socket.listen((RawSocketEvent event) {
+        if (event == RawSocketEvent.read) {
+          Datagram? datagram = socket.receive();
+          if (datagram != null) {
+            String message = String.fromCharCodes(datagram.data);
+            if (message == 'DISCOVER') {
+              socket.send(Uint8List.fromList('RESPONSE'.codeUnits), datagram.address, datagram.port);
+            }
           }
         }
-      }
+      });
     });
-  });
+  }
+
+void handleData(RawSocketEvent event) {
+  if (event == RawSocketEvent.read) {
+    Datagram? datagram = _socket!.receive();
+    if (datagram != null) {
+      String message = String.fromCharCodes(datagram.data);
+      logger.d('Received message: $message from ${datagram.address}');
+
+      if (message.trim() == 'RESPONSE') {
+        String deviceAddress = datagram.address.address;
+        if (!devices.contains(deviceAddress)) {
+          devices.add(deviceAddress);
+          _devicesController.add(devices.toList()); // Notify listeners
+          logger.i('Added device: $deviceAddress');
+        } else {
+          logger.d('Device $deviceAddress already in list');
+        }
+      } else if (message.trim() == 'DISCOVER') {
+        logger.d('Received DISCOVER, sending RESPONSE');
+        Uint8List responseData = Uint8List.fromList('RESPONSE'.codeUnits);
+        _socket!.send(responseData, datagram.address, datagram.port);
+      } else {
+        logger.d('Unknown message: $message');
+      }
+    } else {
+      logger.d('Datagram is null');
+    }
+  } else {
+    logger.d('Event is not a read event: $event');
+  }
 }
 
-
-  void handleData(RawSocketEvent event) {
-    if (event == RawSocketEvent.read) {
-      Datagram? datagram = _socket!.receive();
-      if (datagram != null) {
-        String message = String.fromCharCodes(datagram.data);
-        logger.d('Received message: $message from ${datagram.address}');
-        if (message.trim() == 'RESPONSE') {
-          String deviceAddress = datagram.address.address;
-          if (!devices.contains(deviceAddress)) {
-            devices.add(deviceAddress);
-            _devicesController.add(devices.toList()); // Notify listeners
-            logger.i('Added device: $deviceAddress');
-          }
-        }
-      }
-    }
-  }
 
   Future<void> sendFile(File file, String deviceAddress) async {
     try {
