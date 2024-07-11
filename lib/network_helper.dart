@@ -228,7 +228,7 @@ Future<String> _receiveMetadata(Socket client) async {
   await client.listen((List<int> event) {
     data.addAll(event);
   }).asFuture();
-  
+
   // Convert received data to a string
   String receivedData = String.fromCharCodes(data);
 
