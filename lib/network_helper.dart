@@ -63,10 +63,16 @@ class NetworkHelper {
         timer.cancel();
       } else {
         try {
-          // Convert String 'DISCOVER' to Uint8List and send multicast packet
-          Uint8List data = Uint8List.fromList('RESPONSE'.codeUnits);
+          // Create a JSON object for metadata
+          Map<String, dynamic> metadata = {
+            'type': 'DISCOVER',
+          };
+          String jsonMetadata = json.encode(metadata);
+
+          // Convert JSON string to Uint8List and send multicast packet
+          Uint8List data = Uint8List.fromList(utf8.encode(jsonMetadata));
           _socket!.send(data, InternetAddress(multicastAddress), port);
-          logger.d('Sent multicast RESPONSE');
+          logger.d('Sent multicast DISCOVER');
         } catch (e) {
           logger.e('Error sending multicast packet: $e');
         }
@@ -90,9 +96,15 @@ class NetworkHelper {
             if (datagram != null) {
               String message = String.fromCharCodes(datagram.data);
               logger.d('Received discovery message: $message from ${datagram.address}');
-              if (message.trim() == 'RESPONSE') {
-                socket.send(Uint8List.fromList('RESPONSE'.codeUnits), datagram.address, datagram.port);
-                logger.d('Sent RESPONSE to ${datagram.address}');
+              try {
+                // Try to parse JSON from received data
+                Map<String, dynamic> jsonData = json.decode(message);
+                if (jsonData.containsKey('type') && jsonData['type'] == 'RESPONSE') {
+                  socket.send(Uint8List.fromList(utf8.encode(message)), datagram.address, datagram.port);
+                  logger.d('Sent RESPONSE to ${datagram.address}');
+                }
+              } catch (e) {
+                logger.e('Error parsing JSON: $e');
               }
             }
           }
@@ -109,17 +121,23 @@ class NetworkHelper {
       if (datagram != null) {
         String message = String.fromCharCodes(datagram.data);
         logger.d('Received message: $message from ${datagram.address}');
-        if (message.trim() == 'RESPONSE') {
-          String deviceAddress = datagram.address.address;
-          if (!devices.contains(deviceAddress)) {
-            devices.add(deviceAddress);
-            _devicesController.add(devices.toList()); // Notify listeners
-            logger.i('Added device: $deviceAddress');
+        try {
+          // Try to parse JSON from received data
+          Map<String, dynamic> jsonData = json.decode(message);
+          if (jsonData.containsKey('type') && jsonData['type'] == 'RESPONSE') {
+            String deviceAddress = datagram.address.address;
+            if (!devices.contains(deviceAddress)) {
+              devices.add(deviceAddress);
+              _devicesController.add(devices.toList()); // Notify listeners
+              logger.i('Added device: $deviceAddress');
+            } else {
+              logger.d('Device $deviceAddress already in list');
+            }
           } else {
-            logger.d('Device $deviceAddress already in list');
+            logger.d('Message is not a RESPONSE: $message');
           }
-        } else {
-          logger.d('Message is not a RESPONSE: $message');
+        } catch (e) {
+          logger.e('Error parsing JSON: $e');
         }
       } else {
         logger.d('Datagram is null');
@@ -132,36 +150,35 @@ class NetworkHelper {
     }
   }
 
-Future<void> sendFile(File file, String deviceAddress) async {
-  try {
-    // Open a TCP socket to the selected device
-    final socket = await Socket.connect(deviceAddress, port);
-    logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
+  Future<void> sendFile(File file, String deviceAddress) async {
+    try {
+      // Open a TCP socket to the selected device
+      final socket = await Socket.connect(deviceAddress, port);
+      logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
 
-    // Send the file name and size first
-    final fileName = path.basename(file.path);
-    final fileSize = await file.length();
-    socket.write('$fileName:$fileSize\n');
+      // Send the file name and size first
+      final fileName = path.basename(file.path);
+      final fileSize = await file.length();
+      socket.write('$fileName:$fileSize\n');
 
-    // Wait for acknowledgment
-    await socket.flush();
+      // Wait for acknowledgment
+      await socket.flush();
 
-    // Send the file data
-    final fileStream = file.openRead();
-    await fileStream.pipe(socket);
+      // Send the file data
+      final fileStream = file.openRead();
+      await fileStream.pipe(socket);
 
-    // Close the socket connection
-    await socket.close();
-    logger.i('File sent successfully');
+      // Close the socket connection
+      await socket.close();
+      logger.i('File sent successfully');
 
-    // Restart device discovery after file transfer
-    _sendDiscoveryPacket();
-  } catch (e) {
-    logger.e('Error sending file: $e');
-    throw e;
+      // Restart device discovery after file transfer
+      _sendDiscoveryPacket();
+    } catch (e) {
+      logger.e('Error sending file: $e');
+      throw e;
+    }
   }
-}
-
 
   ServerSocket? _serverSocket;
 
@@ -173,89 +190,89 @@ Future<void> sendFile(File file, String deviceAddress) async {
     return directoryPath;
   }
 
-Future<void> startReceiving([String? s]) async {
-  String? savePath = await pickSaveDirectory();
-  if (savePath == null) {
-    logger.w('No directory selected for saving received files');
-    return;
+  Future<void> startReceiving() async {
+    String? savePath = await pickSaveDirectory();
+    if (savePath == null) {
+      logger.w('No directory selected for saving received files');
+      return;
+    }
+
+    try {
+      _serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
+      _serverSocket!.listen((Socket client) async {
+        logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
+
+        try {
+          // Receive the JSON metadata
+          String metadata = await _receiveMetadata(client);
+          logger.d('Received metadata: $metadata');
+
+          // Parse JSON metadata
+          Map<String, dynamic> jsonData = json.decode(metadata);
+          // Handle jsonData as needed, for example:
+          String type = jsonData['type'];
+
+          // Implement the rest of the file receiving logic based on type if needed
+          // For simplicity, assuming a direct file transfer after metadata check
+          // Receive the file data
+          await _receiveFileData(client, savePath);
+
+          await client.close();
+          logger.i('File received');
+        } catch (e) {
+          logger.e('Error processing client connection: $e');
+          await client.close();
+        }
+      });
+    } catch (e) {
+      logger.e('Error starting server: $e');
+    }
   }
 
-  try {
-    _serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
-    _serverSocket!.listen((Socket client) async {
-      logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
+  Future<String> _receiveMetadata(Socket client) async {
+    Completer<String> completer = Completer<String>();
+    List<int> data = [];
 
-      // Receive the file name and size
-      String metadata = await _receiveMetadata(client);
-      logger.d('Received metadata: $metadata');
+    client.listen((List<int> event) {
+      data.addAll(event);
+      String receivedData = utf8.decode(data);
 
-      var parts = metadata.split(':');
-      if (parts.length != 2) {
-        logger.e('Invalid metadata format: $metadata');
-        await client.close();
-        return;
+      // Try to parse JSON from received data
+      try {
+        Map<String, dynamic> jsonData = json.decode(receivedData);
+        if (jsonData.containsKey('type') && (jsonData['type'] == 'DISCOVER' || jsonData['type'] == 'RESPONSE')) {
+          completer.complete(receivedData);
+          client.close();
+        }
+      } catch (e) {
+        // JSON parsing error, continue receiving
       }
-
-      String fileName = parts[0];
-      String fileSizeStr = parts[1].trim();  // Trim to remove any leading/trailing whitespace
-      if (!_isValidFileSizeString(fileSizeStr)) {
-        logger.e('Invalid file size in metadata: $fileSizeStr');
-        await client.close();
-        return;
+    }, onDone: () {
+      if (!completer.isCompleted) {
+        completer.completeError('Connection closed before metadata was fully received');
       }
-
-      int fileSize = int.parse(fileSizeStr);
-
-      // Receive the file data
-      String filePath = path.join(savePath, fileName);
-      await _receiveFileData(client, filePath, fileSize);
-
-      await client.close();
-      logger.i('File received: $filePath');
+    }, onError: (error) {
+      if (!completer.isCompleted) {
+        completer.completeError(error);
+      }
     });
-  } catch (e) {
-    logger.e('Error starting server: $e');
-  }
-}
 
-bool _isValidFileSizeString(String str) {
-  // Check if the string contains only digits
-  return str.isNotEmpty && str.codeUnits.every((char) => char >= 48 && char <= 57);
-}
-
-Future<String> _receiveMetadata(Socket client) async {
-  List<int> data = [];
-  await client.listen((List<int> event) {
-    data.addAll(event);
-  }).asFuture();
-
-  // Convert received data to a string
-  String receivedData = String.fromCharCodes(data);
-
-  // Extract the part of the string that contains metadata
-  int separatorIndex = receivedData.indexOf(':');
-  if (separatorIndex != -1) {
-    return receivedData.substring(0, separatorIndex + 1);
-  } else {
-    return receivedData; // If no separator found, return whole received data
-  }
-}
-
-Future<void> _receiveFileData(Socket client, String filePath, int fileSize) async {
-  File file = File(filePath);
-  IOSink fileSink = file.openWrite();
-  int bytesRead = 0;
-
-  await for (List<int> data in client) {
-    fileSink.add(data);
-    bytesRead += data.length;
-    if (bytesRead >= fileSize) break;
+    return completer.future;
   }
 
-  await fileSink.close();
-}
+  Future<void> _receiveFileData(Socket client, String savePath) async {
+    // Implement your file data receiving logic here
+    // This is simplified for demonstration
+    // Example: Save received data to a file
+    File file = File('$savePath/received_file.txt');
+    IOSink fileSink = file.openWrite();
 
+    await client.forEach((List<int> data) {
+      fileSink.add(data);
+    });
 
+    await fileSink.close();
+  }
 
   void stopReceiving() {
     _serverSocket?.close();

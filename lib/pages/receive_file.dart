@@ -51,7 +51,7 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
       setState(() {
         saveDirectory = directoryPath;
       });
-      networkHelper.startReceiving(saveDirectory!);
+      networkHelper.startReceiving(); // Save path is picked within startReceiving()
       print('Started receiving files, saving to $saveDirectory');
     } else {
       print('No directory selected');
