@@ -197,12 +197,14 @@ Future<void> startReceiving([String? s]) async {
       }
 
       String fileName = parts[0];
-      int? fileSize = int.tryParse(parts[1]);
-      if (fileSize == null) {
-        logger.e('Invalid file size in metadata: ${parts[1]}');
+      String fileSizeStr = parts[1].trim();  // Trim to remove any leading/trailing whitespace
+      if (!_isValidFileSizeString(fileSizeStr)) {
+        logger.e('Invalid file size in metadata: $fileSizeStr');
         await client.close();
         return;
       }
+
+      int fileSize = int.parse(fileSizeStr);
 
       // Receive the file data
       String filePath = path.join(savePath, fileName);
@@ -216,12 +218,27 @@ Future<void> startReceiving([String? s]) async {
   }
 }
 
+bool _isValidFileSizeString(String str) {
+  // Check if the string contains only digits
+  return str.isNotEmpty && str.codeUnits.every((char) => char >= 48 && char <= 57);
+}
+
 Future<String> _receiveMetadata(Socket client) async {
   List<int> data = [];
   await client.listen((List<int> event) {
     data.addAll(event);
   }).asFuture();
-  return String.fromCharCodes(data);
+  
+  // Convert received data to a string
+  String receivedData = String.fromCharCodes(data);
+
+  // Extract the part of the string that contains metadata
+  int separatorIndex = receivedData.indexOf(':');
+  if (separatorIndex != -1) {
+    return receivedData.substring(0, separatorIndex + 1);
+  } else {
+    return receivedData; // If no separator found, return whole received data
+  }
 }
 
 Future<void> _receiveFileData(Socket client, String filePath, int fileSize) async {
@@ -237,6 +254,7 @@ Future<void> _receiveFileData(Socket client, String filePath, int fileSize) asyn
 
   await fileSink.close();
 }
+
 
 
   void stopReceiving() {
