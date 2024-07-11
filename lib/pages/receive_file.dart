@@ -18,11 +18,13 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
   void initState() {
     super.initState();
     _getIpAddress();
+    networkHelper.startMulticasting(); // Start multicasting when page initializes
   }
 
   @override
   void dispose() {
     networkHelper.stopReceiving();
+    networkHelper.stopMulticasting(); // Stop multicasting when page is disposed
     super.dispose();
   }
 
