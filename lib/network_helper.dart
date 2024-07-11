@@ -66,7 +66,7 @@ class NetworkHelper {
           // Convert String 'DISCOVER' to Uint8List and send multicast packet
           Uint8List data = Uint8List.fromList('RESPONSE'.codeUnits);
           _socket!.send(data, InternetAddress(multicastAddress), port);
-          logger.d('Sent multicast RESPONSE');
+          // logger.d('Sent multicast RESPONSE');
         } catch (e) {
           logger.e('Error sending multicast packet: $e');
         }
@@ -89,10 +89,10 @@ class NetworkHelper {
             Datagram? datagram = socket.receive();
             if (datagram != null) {
               String message = String.fromCharCodes(datagram.data);
-              logger.d('Received discovery message: $message from ${datagram.address}');
+              // logger.d('Received discovery message: $message from ${datagram.address}');
               if (message.trim() == 'RESPONSE') {
                 socket.send(Uint8List.fromList('RESPONSE'.codeUnits), datagram.address, datagram.port);
-                logger.d('Sent RESPONSE to ${datagram.address}');
+                // logger.d('Sent RESPONSE to ${datagram.address}');
               }
             }
           }
@@ -108,15 +108,15 @@ class NetworkHelper {
       Datagram? datagram = _socket!.receive();
       if (datagram != null) {
         String message = String.fromCharCodes(datagram.data);
-        logger.d('Received message: $message from ${datagram.address}');
+        // logger.d('Received message: $message from ${datagram.address}');
         if (message.trim() == 'RESPONSE') {
           String deviceAddress = datagram.address.address;
           if (!devices.contains(deviceAddress)) {
             devices.add(deviceAddress);
             _devicesController.add(devices.toList()); // Notify listeners
-            logger.i('Added device: $deviceAddress');
+            // logger.i('Added device: $deviceAddress');
           } else {
-            logger.d('Device $deviceAddress already in list');
+            // logger.d('Device $deviceAddress already in list');
           }
         } else {
           logger.d('Message is not a RESPONSE: $message');
@@ -128,7 +128,7 @@ class NetworkHelper {
       logger.d('Socket is trying to write, but this handler is for read events.');
       // Handle write event if necessary
     } else {
-      logger.d('Unhandled event type: $event');
+      // logger.d('Unhandled event type: $event');
     }
   }
 
@@ -186,18 +186,18 @@ Future<void> startReceiving([String? s]) async {
       logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
 
       // Receive the file name and size
-      String metadata = await _receiveMetadata(client);
+      String? metadata = await _receiveMetadata(client);
       logger.d('Received metadata: $metadata');
 
-      var parts = metadata.split(':');
-      if (parts.length != 2) {
+      var parts = metadata?.split(':');
+      if (parts?.length != 2) {
         logger.e('Invalid metadata format: $metadata');
         await client.close();
         return;
       }
 
-      String fileName = parts[0];
-      String fileSizeStr = parts[1].trim();  // Trim to remove any leading/trailing whitespace
+      String fileName = parts![0];
+      String fileSizeStr = parts![1].trim();  // Trim to remove any leading/trailing whitespace
       if (!_isValidFileSizeString(fileSizeStr)) {
         logger.e('Invalid file size in metadata: $fileSizeStr');
         await client.close();
@@ -219,11 +219,21 @@ Future<void> startReceiving([String? s]) async {
 }
 
 bool _isValidFileSizeString(String str) {
-  // Check if the string contains only digits
-  return str.isNotEmpty && str.codeUnits.every((char) => char >= 48 && char <= 57);
+  try {
+    // Attempt to parse the string to an integer
+    int fileSize = int.parse(str);
+
+    // Check if the parsed integer is valid (non-negative)
+    return fileSize >= 0;
+  } catch (e) {
+    // Log any parsing errors
+    logger.e('Error parsing file size: $e');
+    return false;
+  }
 }
 
-Future<String> _receiveMetadata(Socket client) async {
+
+Future<String?> _receiveMetadata(Socket client) async {
   List<int> data = [];
   await client.listen((List<int> event) {
     data.addAll(event);
@@ -235,11 +245,20 @@ Future<String> _receiveMetadata(Socket client) async {
   // Extract the part of the string that contains metadata
   int separatorIndex = receivedData.indexOf(':');
   if (separatorIndex != -1) {
-    return receivedData.substring(0, separatorIndex + 1); // Include the separator
+    String metadata = receivedData.substring(0, separatorIndex + 1); // Include the separator
+    String fileSizeStr = receivedData.substring(separatorIndex + 1).trim(); // Extract file size part
+    if (_isValidFileSizeString(fileSizeStr)) {
+      return metadata + fileSizeStr;
+    } else {
+      logger.e('Invalid file size in metadata: $fileSizeStr');
+      await client.close();
+      return null; // Return null or handle invalid metadata case
+    }
   } else {
     return receivedData; // If no separator found, return whole received data
   }
 }
+
 
 Future<void> _receiveFileData(Socket client, String filePath, int fileSize) async {
   File file = File(filePath);
