@@ -235,7 +235,7 @@ Future<String> _receiveMetadata(Socket client) async {
   // Extract the part of the string that contains metadata
   int separatorIndex = receivedData.indexOf(':');
   if (separatorIndex != -1) {
-    return receivedData.substring(0, separatorIndex + 1);
+    return receivedData.substring(0, separatorIndex + 1); // Include the separator
   } else {
     return receivedData; // If no separator found, return whole received data
   }
@@ -244,16 +244,21 @@ Future<String> _receiveMetadata(Socket client) async {
 Future<void> _receiveFileData(Socket client, String filePath, int fileSize) async {
   File file = File(filePath);
   IOSink fileSink = file.openWrite();
-  int bytesRead = 0;
+  int bytesReceived = 0;
 
   await for (List<int> data in client) {
     fileSink.add(data);
-    bytesRead += data.length;
-    if (bytesRead >= fileSize) break;
+    bytesReceived += data.length;
+
+    // Check if all expected bytes have been received
+    if (bytesReceived >= fileSize) {
+      break;
+    }
   }
 
   await fileSink.close();
 }
+
 
 
 
