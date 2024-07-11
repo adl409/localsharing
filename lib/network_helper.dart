@@ -103,62 +103,65 @@ class NetworkHelper {
     }
   }
 
-void handleData(RawSocketEvent event) {
-  if (event == RawSocketEvent.read) {
-    Datagram? datagram = _socket!.receive();
-    if (datagram != null) {
-      String message = String.fromCharCodes(datagram.data);
-      logger.d('Received message: $message from ${datagram.address}');
-      if (message.trim() == 'RESPONSE') {
-        String deviceAddress = datagram.address.address;
-        if (!devices.contains(deviceAddress)) {
-          devices.add(deviceAddress);
-          _devicesController.add(devices.toList()); // Notify listeners
-          logger.i('Added device: $deviceAddress');
+  void handleData(RawSocketEvent event) {
+    if (event == RawSocketEvent.read) {
+      Datagram? datagram = _socket!.receive();
+      if (datagram != null) {
+        String message = String.fromCharCodes(datagram.data);
+        logger.d('Received message: $message from ${datagram.address}');
+        if (message.trim() == 'RESPONSE') {
+          String deviceAddress = datagram.address.address;
+          if (!devices.contains(deviceAddress)) {
+            devices.add(deviceAddress);
+            _devicesController.add(devices.toList()); // Notify listeners
+            logger.i('Added device: $deviceAddress');
+          } else {
+            logger.d('Device $deviceAddress already in list');
+          }
         } else {
-          logger.d('Device $deviceAddress already in list');
+          logger.d('Message is not a RESPONSE: $message');
         }
       } else {
-        logger.d('Message is not a RESPONSE: $message');
+        logger.d('Datagram is null');
       }
+    } else if (event == RawSocketEvent.write) {
+      logger.d('Socket is trying to write, but this handler is for read events.');
+      // Handle write event if necessary
     } else {
-      logger.d('Datagram is null');
+      logger.d('Unhandled event type: $event');
     }
-  } else if (event == RawSocketEvent.write) {
-    logger.d('Socket is trying to write, but this handler is for read events.');
-    // Handle write event if necessary
-  } else {
-    logger.d('Unhandled event type: $event');
+  }
+
+Future<void> sendFile(File file, String deviceAddress) async {
+  try {
+    // Open a TCP socket to the selected device
+    final socket = await Socket.connect(deviceAddress, port);
+    logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
+
+    // Send the file name and size first
+    final fileName = path.basename(file.path);
+    final fileSize = await file.length();
+    socket.write('$fileName:$fileSize\n');
+
+    // Wait for acknowledgment
+    await socket.flush();
+
+    // Send the file data
+    final fileStream = file.openRead();
+    await fileStream.pipe(socket);
+
+    // Close the socket connection
+    await socket.close();
+    logger.i('File sent successfully');
+
+    // Restart device discovery after file transfer
+    _sendDiscoveryPacket();
+  } catch (e) {
+    logger.e('Error sending file: $e');
+    throw e;
   }
 }
 
-
-  Future<void> sendFile(File file, String deviceAddress) async {
-    try {
-      // Open a TCP socket to the selected device
-      final socket = await Socket.connect(deviceAddress, port);
-      logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
-
-      // Send the file name and size first
-      final fileName = path.basename(file.path);
-      final fileSize = await file.length();
-      socket.write('$fileName:$fileSize\n');
-
-      // Wait for acknowledgment
-      await socket.flush();
-
-      // Send the file data
-      final fileStream = file.openRead();
-      await fileStream.pipe(socket);
-
-      // Close the socket connection
-      await socket.close();
-      logger.i('File sent successfully');
-    } catch (e) {
-      logger.e('Error sending file: $e');
-      throw e;
-    }
-  }
 
   ServerSocket? _serverSocket;
 
@@ -170,49 +173,71 @@ void handleData(RawSocketEvent event) {
     return directoryPath;
   }
 
-  Future<void> startReceiving([String? s]) async {
-    String? savePath = await pickSaveDirectory();
-    if (savePath == null) {
-      logger.w('No directory selected for saving received files');
-      return;
-    }
-
-    try {
-      _serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
-      _serverSocket!.listen((Socket client) async {
-        logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
-
-        // Receive the file name and size
-        List<int> data = [];
-        await client.listen((List<int> event) {
-          data.addAll(event);
-        }).asFuture();
-
-        String metadata = String.fromCharCodes(data);
-        var parts = metadata.split(':');
-        String fileName = parts[0];
-        int fileSize = int.parse(parts[1]);
-
-        // Receive the file data
-        String filePath = path.join(savePath, fileName);
-        File file = File(filePath);
-        IOSink fileSink = file.openWrite();
-        int bytesRead = 0;
-
-        await for (List<int> data in client) {
-          fileSink.add(data);
-          bytesRead += data.length;
-          if (bytesRead >= fileSize) break;
-        }
-
-        await fileSink.close();
-        await client.close();
-        logger.i('File received: $filePath');
-      });
-    } catch (e) {
-      logger.e('Error starting server: $e');
-    }
+Future<void> startReceiving([String? s]) async {
+  String? savePath = await pickSaveDirectory();
+  if (savePath == null) {
+    logger.w('No directory selected for saving received files');
+    return;
   }
+
+  try {
+    _serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
+    _serverSocket!.listen((Socket client) async {
+      logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
+
+      // Receive the file name and size
+      String metadata = await _receiveMetadata(client);
+      logger.d('Received metadata: $metadata');
+
+      var parts = metadata.split(':');
+      if (parts.length != 2) {
+        logger.e('Invalid metadata format: $metadata');
+        await client.close();
+        return;
+      }
+
+      String fileName = parts[0];
+      int? fileSize = int.tryParse(parts[1]);
+      if (fileSize == null) {
+        logger.e('Invalid file size in metadata: ${parts[1]}');
+        await client.close();
+        return;
+      }
+
+      // Receive the file data
+      String filePath = path.join(savePath, fileName);
+      await _receiveFileData(client, filePath, fileSize);
+
+      await client.close();
+      logger.i('File received: $filePath');
+    });
+  } catch (e) {
+    logger.e('Error starting server: $e');
+  }
+}
+
+Future<String> _receiveMetadata(Socket client) async {
+  List<int> data = [];
+  await client.listen((List<int> event) {
+    data.addAll(event);
+  }).asFuture();
+  return String.fromCharCodes(data);
+}
+
+Future<void> _receiveFileData(Socket client, String filePath, int fileSize) async {
+  File file = File(filePath);
+  IOSink fileSink = file.openWrite();
+  int bytesRead = 0;
+
+  await for (List<int> data in client) {
+    fileSink.add(data);
+    bytesRead += data.length;
+    if (bytesRead >= fileSize) break;
+  }
+
+  await fileSink.close();
+}
+
 
   void stopReceiving() {
     _serverSocket?.close();
