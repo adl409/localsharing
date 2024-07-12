@@ -184,82 +184,131 @@ Future<void> startReceiving([String? s]) async {
     _serverSocket!.listen((Socket client) async {
       logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
 
-      // Receive the metadata
-      String? metadataJson = await _receiveMetadata(client);
-      logger.d('Received metadata: $metadataJson');
+      try {
+        // Receive the metadata
+        String? metadataJson = await _receiveMetadata(client);
+        logger.d('Received metadata: $metadataJson');
 
-      if (metadataJson == null) {
-        logger.e('Invalid metadata received');
+        if (metadataJson == null) {
+          logger.e('Invalid metadata received');
+          await client.close();
+          return;
+        }
+
+        // Deserialize the metadata
+        final metadata = jsonDecode(metadataJson);
+        final fileName = metadata['fileName'];
+        final fileSize = metadata['fileSize'];
+
+        if (fileName == null || fileSize == null) {
+          logger.e('Invalid metadata format: $metadataJson');
+          await client.close();
+          return;
+        }
+
+        // Receive the file data
+        String filePath = path.join(savePath, fileName);
+        await _receiveFileData(client, filePath, fileSize);
+
+        logger.i('File received: $filePath');
+      } catch (e) {
+        logger.e('Error processing client connection: $e');
+      } finally {
         await client.close();
-        return;
       }
-
-      // Deserialize the metadata
-      final metadata = jsonDecode(metadataJson);
-      final fileName = metadata['fileName'];
-      final fileSize = metadata['fileSize'];
-
-      if (fileName == null || fileSize == null) {
-        logger.e('Invalid metadata format: $metadataJson');
-        await client.close();
-        return;
-      }
-
-      // Receive the file data
-      String filePath = path.join(savePath, fileName);
-      await _receiveFileData(client, filePath, fileSize);
-
-      await client.close();
-      logger.i('File received: $filePath');
     });
   } catch (e) {
     logger.e('Error starting server: $e');
   }
 }
 
+
+
+
 Future<String?> _receiveMetadata(Socket client) async {
-  List<int> data = [];
-  await client.listen((List<int> event) {
-    data.addAll(event);
-  }).asFuture();
+  Completer<String?> completer = Completer<String?>();
+  StringBuffer buffer = StringBuffer();
+  bool metadataReceived = false;
 
-  String receivedData = String.fromCharCodes(data);
-  logger.d('Received metadata string: $receivedData');
+  StreamSubscription<List<int>>? subscription;
+  subscription = client.listen(
+    (List<int> data) {
+      String receivedString = String.fromCharCodes(data);
+      buffer.write(receivedString);
 
-  // Check for JSON metadata
+      // Attempt to extract JSON metadata
+      try {
+        // Regular expression to find JSON object
+        final jsonMatch = RegExp(r'{.*?}').firstMatch(buffer.toString());
+        if (jsonMatch != null) {
+          final metadataString = jsonMatch.group(0)!;
+          final metadata = jsonDecode(metadataString);
+          metadataReceived = true;
+          completer.complete(metadataString);
+          subscription?.cancel();  // Stop listening once metadata is received
+        }
+      } catch (e) {
+        // Handle JSON parse error
+        if (!metadataReceived) {
+          completer.complete(null);
+        }
+      }
+    },
+    onError: (error) {
+      completer.completeError(error);
+    },
+    onDone: () {
+      if (!metadataReceived) {
+        completer.complete(null);
+      }
+    },
+    cancelOnError: true,
+  );
+
   try {
-    final metadata = jsonDecode(receivedData);
-    return jsonEncode(metadata); // Return the JSON string if valid
+    return await completer.future;
   } catch (e) {
-    logger.e('Invalid metadata format: $receivedData');
-    await client.close();
-    return null; // Return null if JSON is invalid
+    logger.e('Error receiving metadata: $e');
+    return null;
   }
 }
+
+
 
 Future<void> _receiveFileData(Socket client, String filePath, int fileSize) async {
   File file = File(filePath);
   IOSink fileSink = file.openWrite();
   int bytesRead = 0;
 
-  await for (List<int> data in client) {
-    fileSink.add(data);
-    bytesRead += data.length;
-    if (bytesRead >= fileSize) break;
-  }
+  StreamSubscription<List<int>>? subscription;
+  subscription = client.listen(
+    (List<int> data) {
+      bytesRead += data.length;
+      fileSink.add(data);
+      if (bytesRead >= fileSize) {
+        subscription?.cancel();  // Stop listening once the file is completely received
+      }
+    },
+    onError: (error) async {
+      logger.e('Error receiving file data: $error');
+      await fileSink.close();
+      await file.delete();  // Clean up the partially written file
+    },
+    onDone: () async {
+      await fileSink.close();
+      if (bytesRead < fileSize) {
+        logger.w('File transfer incomplete. Expected $fileSize bytes, but received $bytesRead bytes.');
+      }
+    },
+    cancelOnError: true,
+  );
 
-  await fileSink.close();
+  await subscription.asFuture();  // Await the completion of the stream
 }
 
 
-bool _isValidFileSizeString(String str) {
-  try {
-    int.parse(str); // Attempt to parse the string as an integer
-    return true;
-  } catch (e) {
-    return false; // Return false if parsing fails
-  }
-}
+
+
 
   void stopReceiving() {
     _serverSocket?.close();
