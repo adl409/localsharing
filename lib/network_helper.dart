@@ -205,9 +205,9 @@ class NetworkHelper {
       }
 
       // Deserialize the metadata
-      final metadata = jsonDecode(metadataJson);
-      final fileName = metadata['fileName'];
-      final fileSize = metadata['fileSize'];
+      final Map<String, dynamic> metadata = jsonDecode(metadataJson);
+      final String? fileName = metadata['fileName'];
+      final int? fileSize = metadata['fileSize'];
 
       if (fileName == null || fileSize == null) {
         logger.e('Invalid metadata format: $metadataJson');
@@ -240,11 +240,10 @@ class NetworkHelper {
 
         // Attempt to extract JSON metadata
         try {
-          // Regular expression to find JSON object
-          final jsonMatch = RegExp(r'{.*?}').firstMatch(buffer.toString());
+          // Regular expression to find JSON object followed by newline
+          final jsonMatch = RegExp(r'\{.*?\}\n').firstMatch(buffer.toString());
           if (jsonMatch != null) {
             final metadataString = jsonMatch.group(0)!;
-            final metadata = jsonDecode(metadataString);
             metadataReceived = true;
             completer.complete(metadataString);
             subscription?.cancel(); // Stop listening once metadata is received
