@@ -134,14 +134,15 @@ class NetworkHelper {
 
 Future<void> sendFile(File file, String deviceAddress) async {
   try {
-    // Open a TCP socket to the selected device
     final socket = await Socket.connect(deviceAddress, port);
     logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
 
-    // Send the file name and size first
     final fileName = path.basename(file.path);
     final fileSize = await file.length();
-    socket.write('$fileName:$fileSize\n');
+
+    // Serialize metadata to JSON
+    final metadata = jsonEncode({'fileName': fileName, 'fileSize': fileSize});
+    socket.write('$metadata\n');
 
     // Wait for acknowledgment
     await socket.flush();
@@ -150,11 +151,9 @@ Future<void> sendFile(File file, String deviceAddress) async {
     final fileStream = file.openRead();
     await fileStream.pipe(socket);
 
-    // Close the socket connection
     await socket.close();
     logger.i('File sent successfully');
 
-    // Restart device discovery after file transfer
     _sendDiscoveryPacket();
   } catch (e) {
     logger.e('Error sending file: $e');
@@ -185,26 +184,26 @@ Future<void> startReceiving([String? s]) async {
     _serverSocket!.listen((Socket client) async {
       logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
 
-      // Receive the file name and size
-      String? metadata = await _receiveMetadata(client);
-      logger.d('Received metadata: $metadata');
+      // Receive the metadata
+      String? metadataJson = await _receiveMetadata(client);
+      logger.d('Received metadata: $metadataJson');
 
-      var parts = metadata?.split(':');
-      if (parts?.length != 2) {
-        logger.e('Invalid metadata format: $metadata');
+      if (metadataJson == null) {
+        logger.e('Invalid metadata received');
         await client.close();
         return;
       }
 
-      String fileName = parts![0];
-      String fileSizeStr = parts![1].trim();  // Trim to remove any leading/trailing whitespace
-      if (!_isValidFileSizeString(fileSizeStr)) {
-        logger.e('Invalid file size in metadata: $fileSizeStr');
+      // Deserialize the metadata
+      final metadata = jsonDecode(metadataJson);
+      final fileName = metadata['fileName'];
+      final fileSize = metadata['fileSize'];
+
+      if (fileName == null || fileSize == null) {
+        logger.e('Invalid metadata format: $metadataJson');
         await client.close();
         return;
       }
-
-      int fileSize = int.parse(fileSizeStr);
 
       // Receive the file data
       String filePath = path.join(savePath, fileName);
@@ -218,68 +217,49 @@ Future<void> startReceiving([String? s]) async {
   }
 }
 
-bool _isValidFileSizeString(String str) {
-  try {
-    // Attempt to parse the string to an integer
-    int fileSize = int.parse(str);
-
-    // Check if the parsed integer is valid (non-negative)
-    return fileSize >= 0;
-  } catch (e) {
-    // Log any parsing errors
-    logger.e('Error parsing file size: $e');
-    return false;
-  }
-}
-
-
 Future<String?> _receiveMetadata(Socket client) async {
   List<int> data = [];
   await client.listen((List<int> event) {
     data.addAll(event);
   }).asFuture();
 
-  // Convert received data to a string
   String receivedData = String.fromCharCodes(data);
+  logger.d('Received metadata string: $receivedData');
 
-  // Extract the part of the string that contains metadata
-  int separatorIndex = receivedData.indexOf(':');
-  if (separatorIndex != -1) {
-    String metadata = receivedData.substring(0, separatorIndex + 1); // Include the separator
-    String fileSizeStr = receivedData.substring(separatorIndex + 1).trim(); // Extract file size part
-    if (_isValidFileSizeString(fileSizeStr)) {
-      return metadata + fileSizeStr;
-    } else {
-      logger.e('Invalid file size in metadata: $fileSizeStr');
-      await client.close();
-      return null; // Return null or handle invalid metadata case
-    }
-  } else {
-    return receivedData; // If no separator found, return whole received data
+  // Check for JSON metadata
+  try {
+    final metadata = jsonDecode(receivedData);
+    return jsonEncode(metadata); // Return the JSON string if valid
+  } catch (e) {
+    logger.e('Invalid metadata format: $receivedData');
+    await client.close();
+    return null; // Return null if JSON is invalid
   }
 }
-
 
 Future<void> _receiveFileData(Socket client, String filePath, int fileSize) async {
   File file = File(filePath);
   IOSink fileSink = file.openWrite();
-  int bytesReceived = 0;
+  int bytesRead = 0;
 
   await for (List<int> data in client) {
     fileSink.add(data);
-    bytesReceived += data.length;
-
-    // Check if all expected bytes have been received
-    if (bytesReceived >= fileSize) {
-      break;
-    }
+    bytesRead += data.length;
+    if (bytesRead >= fileSize) break;
   }
 
   await fileSink.close();
 }
 
 
-
+bool _isValidFileSizeString(String str) {
+  try {
+    int.parse(str); // Attempt to parse the string as an integer
+    return true;
+  } catch (e) {
+    return false; // Return false if parsing fails
+  }
+}
 
   void stopReceiving() {
     _serverSocket?.close();
