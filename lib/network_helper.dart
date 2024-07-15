@@ -207,9 +207,9 @@ class NetworkHelper {
       // Deserialize the metadata
       final Map<String, dynamic> metadata = jsonDecode(metadataJson);
       final String? fileName = metadata['fileName'];
-      final int? fileSize = metadata['fileSize'];
+      final dynamic fileSize = metadata['fileSize'];
 
-      if (fileName == null || fileSize == null) {
+      if (fileName == null || fileSize == null || fileSize is! int) {
         logger.e('Invalid metadata format: $metadataJson');
         await client.close();
         return;
