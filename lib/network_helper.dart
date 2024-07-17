@@ -22,6 +22,8 @@ class NetworkHelper {
   Logger logger = Logger();
   final NetworkInfo _networkInfo = NetworkInfo();
 
+  String? _saveDirectory; // Variable to store selected save directory
+
   Future<void> startMulticasting() async {
     try {
       String? wifiIP = await _networkInfo.getWifiIP();
@@ -146,11 +148,17 @@ class NetworkHelper {
   ServerSocket? _serverSocket;
 
   Future<String?> pickSaveDirectory() async {
+    if (_saveDirectory != null) {
+      return _saveDirectory;
+    }
+
     String? directoryPath = await FilePicker.platform.getDirectoryPath();
     if (directoryPath == null) {
       logger.w('Directory selection was canceled');
+    } else {
+      _saveDirectory = directoryPath;
     }
-    return directoryPath;
+    return _saveDirectory;
   }
 
   Future<void> startReceiving() async {
@@ -176,15 +184,23 @@ class NetworkHelper {
     logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
 
     try {
-      // Receive the metadata
-      String? metadataJson = await _receiveMetadata(client);
-      logger.d('Received metadata: $metadataJson');
+      final buffer = StringBuffer();
+      late StreamSubscription<List<int>> subscription;  // Declare the subscription variable here
 
-      if (metadataJson == null) {
-        logger.e('Invalid metadata received');
-        await client.close();
-        return;
-      }
+      subscription = client.listen(
+        (List<int> data) {
+          buffer.write(String.fromCharCodes(data));
+
+          if (buffer.toString().contains('\n')) {
+            subscription.cancel();
+          }
+        },
+      );
+
+      await subscription.asFuture();
+
+      final metadataJson = buffer.toString().split('\n').first;
+      logger.d('Received metadata: $metadataJson');
 
       // Deserialize the metadata
       final Map<String, dynamic> metadata = jsonDecode(metadataJson);
@@ -206,51 +222,6 @@ class NetworkHelper {
       logger.e('Error processing client connection: $e');
     } finally {
       await client.close();
-    }
-  }
-
-  Future<String?> _receiveMetadata(Socket client) async {
-    Completer<String?> completer = Completer<String?>();
-    StringBuffer buffer = StringBuffer();
-    bool metadataReceived = false;
-
-    client.listen(
-      (List<int> data) {
-        String receivedString = String.fromCharCodes(data);
-        buffer.write(receivedString);
-
-        // Attempt to extract JSON metadata
-        try {
-          // Regular expression to find JSON object followed by newline
-          final jsonMatch = RegExp(r'\{.*?\}\n').firstMatch(buffer.toString());
-          if (jsonMatch != null) {
-            final metadataString = jsonMatch.group(0)!;
-            metadataReceived = true;
-            completer.complete(metadataString);
-          }
-        } catch (e) {
-          // Handle JSON parse error
-          if (!metadataReceived) {
-            completer.complete(null);
-          }
-        }
-      },
-      onError: (error) {
-        completer.completeError(error);
-      },
-      onDone: () {
-        if (!metadataReceived) {
-          completer.complete(null);
-        }
-      },
-      cancelOnError: true,
-    );
-
-    try {
-      return await completer.future;
-    } catch (e) {
-      logger.e('Error receiving metadata: $e');
-      return null;
     }
   }
 
