@@ -125,38 +125,37 @@ class NetworkHelper {
     }
   }
 
-Future<void> sendFile(File file, String deviceAddress, bool encrypt) async {
-  try {
-    final socket = await Socket.connect(deviceAddress, port);
-    logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
+  Future<void> sendFile(File file, String deviceAddress, bool encrypt) async {
+    try {
+      final socket = await Socket.connect(deviceAddress, port);
+      logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
 
-    final fileName = path.basename(file.path);
-    final fileSize = await file.length();
+      final fileName = path.basename(file.path);
+      final fileSize = await file.length();
 
-    // Serialize metadata to JSON
-    final metadata = jsonEncode({'fileName': fileName, 'fileSize': fileSize});
-    final encryptedMetadata = encrypt ? _doubleLayerEncrypt(metadata) : metadata;
-    socket.write('$encryptedMetadata\n');
+      // Serialize metadata to JSON
+      final metadata = jsonEncode({'fileName': fileName, 'fileSize': fileSize});
+      final encryptedMetadata = encrypt ? _doubleLayerEncrypt(metadata) : metadata;
+      socket.write('$encryptedMetadata\n');
 
-    // Wait for acknowledgment
-    await socket.flush();
+      // Wait for acknowledgment
+      await socket.flush();
 
-    // Encrypt and send the file data
-    final fileStream = file.openRead();
-    if (encrypt) {
-      await fileStream.transform(_doubleLayerEncryptStream()).pipe(socket);
-    } else {
-      await fileStream.pipe(socket);
+      // Encrypt and send the file data
+      final fileStream = file.openRead();
+      if (encrypt) {
+        await fileStream.transform(_doubleLayerEncryptStream()).pipe(socket);
+      } else {
+        await fileStream.pipe(socket);
+      }
+
+      await socket.close();
+      logger.i('File sent successfully');
+    } catch (e) {
+      logger.e('Error sending file: $e');
+      throw e;
     }
-
-    await socket.close();
-    logger.i('File sent successfully');
-  } catch (e) {
-    logger.e('Error sending file: $e');
-    throw e;
   }
-}
-
 
   ServerSocket? _serverSocket;
 
@@ -272,8 +271,8 @@ Future<void> sendFile(File file, String deviceAddress, bool encrypt) async {
   }
 
   String _doubleLayerEncrypt(String plainText) {
-    final encrypter1 = encrypt.Encrypter(encrypt.AES(_key1));
-    final encrypter2 = encrypt.Encrypter(encrypt.AES(_key2));
+    final encrypter1 = encrypt.Encrypter(encrypt.AES(_key1, mode: encrypt.AESMode.cbc, padding: null));
+    final encrypter2 = encrypt.Encrypter(encrypt.AES(_key2, mode: encrypt.AESMode.cbc, padding: null));
 
     final encrypted1 = encrypter1.encrypt(plainText, iv: _iv1);
     final encrypted2 = encrypter2.encrypt(encrypted1.base64, iv: _iv2);
@@ -282,8 +281,8 @@ Future<void> sendFile(File file, String deviceAddress, bool encrypt) async {
   }
 
   String _doubleLayerDecrypt(String encryptedText) {
-    final encrypter1 = encrypt.Encrypter(encrypt.AES(_key1));
-    final encrypter2 = encrypt.Encrypter(encrypt.AES(_key2));
+    final encrypter1 = encrypt.Encrypter(encrypt.AES(_key1, mode: encrypt.AESMode.cbc, padding: null));
+    final encrypter2 = encrypt.Encrypter(encrypt.AES(_key2, mode: encrypt.AESMode.cbc, padding: null));
 
     final decrypted1 = encrypter2.decrypt64(encryptedText, iv: _iv2);
     final decrypted2 = encrypter1.decrypt64(decrypted1, iv: _iv1);
@@ -292,8 +291,8 @@ Future<void> sendFile(File file, String deviceAddress, bool encrypt) async {
   }
 
   StreamTransformer<List<int>, List<int>> _doubleLayerEncryptStream() {
-    final encrypter1 = encrypt.Encrypter(encrypt.AES(_key1));
-    final encrypter2 = encrypt.Encrypter(encrypt.AES(_key2));
+    final encrypter1 = encrypt.Encrypter(encrypt.AES(_key1, mode: encrypt.AESMode.cbc, padding: null));
+    final encrypter2 = encrypt.Encrypter(encrypt.AES(_key2, mode: encrypt.AESMode.cbc, padding: null));
 
     return StreamTransformer.fromHandlers(
       handleData: (data, sink) {
@@ -305,8 +304,8 @@ Future<void> sendFile(File file, String deviceAddress, bool encrypt) async {
   }
 
   Uint8List _doubleLayerDecryptBytes(Uint8List encryptedData) {
-    final encrypter1 = encrypt.Encrypter(encrypt.AES(_key1));
-    final encrypter2 = encrypt.Encrypter(encrypt.AES(_key2));
+    final encrypter1 = encrypt.Encrypter(encrypt.AES(_key1, mode: encrypt.AESMode.cbc, padding: null));
+    final encrypter2 = encrypt.Encrypter(encrypt.AES(_key2, mode: encrypt.AESMode.cbc, padding: null));
 
     final decrypted1 = encrypter2.decryptBytes(encrypt.Encrypted(encryptedData), iv: _iv2);
     final decrypted2 = encrypter1.decryptBytes(encrypt.Encrypted(Uint8List.fromList(decrypted1)), iv: _iv1);
