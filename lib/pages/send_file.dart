@@ -13,6 +13,7 @@ class _SendFilePageState extends State<SendFilePage> {
   String? fileName; // To store the selected file name
   File? selectedFile; // To store the selected file
   String? selectedDevice; // To store the selected device
+  bool encryptData = true; // To store the encryption preference
 
   NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
 
@@ -44,7 +45,7 @@ class _SendFilePageState extends State<SendFilePage> {
   void sendFile() async {
     if (selectedFile != null && selectedDevice != null) {
       try {
-        await networkHelper.sendFile(selectedFile!, selectedDevice!);
+        await networkHelper.sendFile(selectedFile!, selectedDevice!, encryptData);
         print('File sent: $fileName to $selectedDevice');
       } catch (e) {
         print('Failed to send file: $e');
@@ -82,6 +83,20 @@ class _SendFilePageState extends State<SendFilePage> {
                     'Selected file: $fileName',
                     style: const TextStyle(fontSize: 16),
                   ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Switch(
+                      value: encryptData,
+                      onChanged: (value) {
+                        setState(() {
+                          encryptData = value;
+                        });
+                      },
+                    ),
+                    const Text('Encrypt Data'),
+                  ],
+                ),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
                   icon: const Icon(Icons.send),
