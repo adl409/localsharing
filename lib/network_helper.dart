@@ -140,13 +140,14 @@ class NetworkHelper {
       final fileStream = file.openRead();
       final encrypter = encrypt.Encrypter(encrypt.AES(_key));
       final encryptStream = encryptData
-          ? fileStream.transform(StreamTransformer.fromHandlers(
-              handleData: (data, sink) {
-                final encryptedData = encrypter.encryptBytes(data, iv: _iv).bytes;
-                sink.add(encryptedData);
-              },
-            ))
-          : fileStream;
+    ? fileStream.transform(StreamTransformer<List<int>, Uint8List>.fromHandlers(
+        handleData: (data, sink) {
+          final encryptedData = encrypter.encryptBytes(Uint8List.fromList(data), iv: _iv).bytes;
+          sink.add(encryptedData);
+        },
+      ))
+    : fileStream;
+
 
       await encryptStream.pipe(socket);
 
