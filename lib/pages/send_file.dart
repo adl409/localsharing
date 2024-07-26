@@ -62,40 +62,36 @@ class _SendFilePageState extends State<SendFilePage> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Row(
+        child: Column(
           children: <Widget>[
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.file_upload),
-                  label: const Text('Select File'),
-                  onPressed: selectFile,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(200, 50),
-                    textStyle: const TextStyle(fontSize: 18),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                  ),
-                ),
-                if (fileName != null)
-                  Text(
-                    'Selected file: $fileName',
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.send),
-                  label: const Text('Send File'),
-                  onPressed: sendFile,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(200, 50),
-                    textStyle: const TextStyle(fontSize: 18),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                  ),
-                ),
-              ],
+            ElevatedButton.icon(
+              icon: const Icon(Icons.file_upload),
+              label: const Text('Select File'),
+              onPressed: selectFile,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+                textStyle: const TextStyle(fontSize: 18),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
             ),
-            const SizedBox(width: 20),
+            const SizedBox(height: 10),
+            if (fileName != null)
+              Text(
+                'Selected file: $fileName',
+                style: const TextStyle(fontSize: 16),
+              ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.send),
+              label: const Text('Send File'),
+              onPressed: sendFile,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+                textStyle: const TextStyle(fontSize: 18),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+            const SizedBox(height: 20),
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(16),
