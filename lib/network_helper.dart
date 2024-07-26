@@ -26,6 +26,7 @@ class NetworkHelper {
   String? _saveDirectory; // Variable to store selected save directory
 
   final encrypt.Key _key = encrypt.Key.fromLength(32); // AES key
+  final encrypt.IV _iv = encrypt.IV.fromLength(16); // AES IV
 
   String? _localIPAddress;
 
@@ -139,18 +140,13 @@ class NetworkHelper {
       // Wait for acknowledgment
       await socket.flush();
 
-      // Encrypt and send the file data in chunks
-      final fileStream = file.openRead();
-      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.ctr));
+      // Encrypt and send the file data
+      final fileBytes = await file.readAsBytes();
+      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
+      final iv = encrypt.IV.fromLength(16); // Generate a new IV for each file transfer
+      final encryptedBytes = encrypter.encryptBytes(fileBytes, iv: iv);
 
-      // Generate a new IV for this file
-      final iv = encrypt.IV.fromLength(16);
-      socket.add(iv.bytes); // Send IV before file data
-
-      await for (var chunk in fileStream) {
-        final encrypted = encrypter.encryptBytes(chunk, iv: iv);
-        socket.add(encrypted.bytes);
-      }
+      socket.add(encryptedBytes.bytes);
 
       await socket.close();
       logger.i('File sent successfully');
@@ -205,9 +201,8 @@ class NetworkHelper {
       int? fileSize;
       IOSink? fileSink;
       int bytesRead = 0;
-      encrypt.IV? iv;
 
-      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.ctr));
+      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
 
       await client.listen(
         (List<int> data) async {
@@ -233,48 +228,32 @@ class NetworkHelper {
               String filePath = path.join(savePath, fileName);
               fileSink = File(filePath).openWrite();
 
-              // Extract IV from the beginning of the data
-              final ivBytes = Uint8List.fromList(data.take(16).toList());
-              iv = encrypt.IV(ivBytes);
-
-              // Remove IV bytes from data
-              final fileData = data.skip(16).toList();
-              if (fileData.isNotEmpty) {
-                final decrypted = encrypter.decryptBytes(
-                  encrypt.Encrypted(Uint8List.fromList(fileData)),
-                  iv: iv,
-                );
-                bytesRead += decrypted.length;
-                fileSink!.add(decrypted);
-
-                if (bytesRead >= fileSize!) {
-                  await fileSink!.close();
-                  logger.i('File received: ${path.join(savePath, fileName!)}');
-                  await client.close();
-                }
-              }
+              // Remove metadata part from buffer
+              buffer.clear();
             }
-          } else if (fileSink != null) {
+          }
+
+          if (metadataProcessed && fileSink != null) {
+            // Decrypt and write file data
             try {
-              // Decrypt and write file data in chunks
               final decrypted = encrypter.decryptBytes(
                 encrypt.Encrypted(Uint8List.fromList(data)),
-                iv: iv!,
+                iv: _iv,
               );
               bytesRead += decrypted.length;
               fileSink!.add(decrypted);
-
-              if (bytesRead >= fileSize!) {
-                await fileSink!.close();
-                logger.i('File received: ${path.join(savePath, fileName!)}');
-                await client.close();
-              }
             } catch (e) {
               logger.e('Decryption error: $e');
               await fileSink!.close();
-              await File(path.join(savePath, fileName!)).delete(); // Clean up the partially written file
+              await File(path.join(savePath, fileName!)).delete();
               await client.close();
               return;
+            }
+
+            if (bytesRead >= fileSize!) {
+              await fileSink!.close();
+              logger.i('File received: ${path.join(savePath, fileName!)}');
+              await client.close();
             }
           }
         },
@@ -302,8 +281,6 @@ class NetworkHelper {
       await client.close();
     }
   }
-
-
 
   void stopReceiving() {
     _serverSocket?.close();
