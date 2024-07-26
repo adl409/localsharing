@@ -141,14 +141,12 @@ class NetworkHelper {
       await socket.flush();
 
       // Encrypt and send the file data
-      final fileStream = file.openRead();
+      final fileBytes = await file.readAsBytes();
       final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
       final iv = encrypt.IV.fromLength(16); // Generate a new IV for each file transfer
+      final encryptedBytes = encrypter.encryptBytes(fileBytes, iv: iv);
 
-      await for (var data in fileStream) {
-        final encrypted = encrypter.encryptBytes(data, iv: iv);
-        socket.add(encrypted.bytes);
-      }
+      socket.add(encryptedBytes.bytes);
 
       await socket.close();
       logger.i('File sent successfully');
@@ -237,12 +235,20 @@ class NetworkHelper {
 
           if (metadataProcessed && fileSink != null) {
             // Decrypt and write file data
-            final decrypted = encrypter.decryptBytes(
-              encrypt.Encrypted(Uint8List.fromList(data)),
-              iv: _iv,
-            );
-            bytesRead += decrypted.length;
-            fileSink!.add(decrypted);
+            try {
+              final decrypted = encrypter.decryptBytes(
+                encrypt.Encrypted(Uint8List.fromList(data)),
+                iv: _iv,
+              );
+              bytesRead += decrypted.length;
+              fileSink!.add(decrypted);
+            } catch (e) {
+              logger.e('Decryption error: $e');
+              await fileSink!.close();
+              await File(path.join(savePath, fileName!)).delete();
+              await client.close();
+              return;
+            }
 
             if (bytesRead >= fileSize!) {
               await fileSink!.close();
