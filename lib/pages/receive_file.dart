@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import 'package:flutter/scheduler.dart';
 
 class ReceiveFilePage extends StatefulWidget {
   @override
@@ -41,7 +42,9 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
         }
       }
     } catch (e) {
-      print('Failed to get IP address: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to get IP address: $e')),
+      );
     }
   }
 
@@ -52,9 +55,13 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
         saveDirectory = directoryPath;
       });
       networkHelper.startReceiving(); // Save path is picked within startReceiving()
-      print('Started receiving files, saving to $saveDirectory');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Saving files to $saveDirectory')),
+      );
     } else {
-      print('No directory selected');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No directory selected')),
+      );
     }
   }
 

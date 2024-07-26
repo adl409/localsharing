@@ -41,18 +41,25 @@ class _SendFilePageState extends State<SendFilePage> {
     }
   }
 
-  void sendFile() async {
-    if (selectedFile != null && selectedDevice != null) {
-      try {
-        await networkHelper.sendFile(selectedFile!, selectedDevice!);
-        print('File sent: $fileName to $selectedDevice');
-      } catch (e) {
-        print('Failed to send file: $e');
-      }
-    } else {
-      print('File or device not selected');
+void sendFile() async {
+  if (selectedFile != null && selectedDevice != null) {
+    try {
+      await networkHelper.sendFile(selectedFile!, selectedDevice!);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('File sent: $fileName to $selectedDevice')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send file: $e')),
+      );
     }
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('File or device not selected')),
+    );
   }
+}
+
 
   @override
   Widget build(BuildContext context) {
