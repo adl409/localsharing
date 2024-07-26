@@ -11,8 +11,8 @@ import 'encryption.dart'; // Import the EncryptionHelper
 class NetworkHelper {
   static const String multicastAddress = '239.0.0.0';
   static const int port = 5555;
-  static const String encryptionKey = 'your-32-char-encryption-key'; // 32 chars for AES-256
-  static const String encryptionIv = 'your-16-char-iv'; // 16 chars for AES
+  static const String encryptionKey = 'H4WtkvK4qyehIe2kjQfH7we1xIHFK67e'; // 32 chars for AES-256
+  static const String encryptionIv = 'HgNRbGHbDSz9T0CC'; // 16 chars for AES
 
   RawDatagramSocket? _socket;
   bool _isClosed = true;
