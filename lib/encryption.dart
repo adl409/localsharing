@@ -1,30 +1,52 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:encrypt/encrypt.dart' as encrypt;
-import 'dart:async';
 
 class EncryptionHelper {
-  final encrypt.Encrypter _encrypter;
-  final encrypt.IV _iv;
+  final encrypt.Key key;
+  final encrypt.IV iv;
 
-  EncryptionHelper(String key, String iv)
-      : _encrypter = encrypt.Encrypter(encrypt.AES(encrypt.Key.fromBase64(key), mode: encrypt.AESMode.cbc)),
-        _iv = encrypt.IV.fromBase64(iv);
+  EncryptionHelper(String keyBase64, String ivBase64)
+      : key = encrypt.Key.fromBase64(keyBase64),
+        iv = encrypt.IV.fromBase64(ivBase64);
 
-  Stream<List<int>> encryptStream(Stream<List<int>> input) {
-    return input.transform(StreamTransformer.fromHandlers(
+  // Encrypt a stream of data
+  Stream<Uint8List> encryptStream(Stream<List<int>> inputStream) {
+    final encrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.cbc));
+
+    return inputStream.transform(StreamTransformer<List<int>, Uint8List>.fromHandlers(
       handleData: (data, sink) {
-        final encrypted = _encrypter.encryptBytes(Uint8List.fromList(data), iv: _iv);
+        final encrypted = encrypter.encryptBytes(Uint8List.fromList(data), iv: iv);
         sink.add(encrypted.bytes);
+      },
+      handleError: (error, stackTrace, sink) {
+        sink.addError(error, stackTrace);
+      },
+      handleDone: (sink) {
+        sink.close();
       },
     ));
   }
 
-  Stream<List<int>> decryptStream(Stream<List<int>> input) {
-    return input.transform(StreamTransformer.fromHandlers(
+  // Decrypt a stream of encrypted data
+  Stream<Uint8List> decryptStream(Stream<List<int>> encryptedStream) {
+    final decrypter = encrypt.Encrypter(encrypt.AES(key, mode: encrypt.AESMode.cbc));
+
+    return encryptedStream.transform(StreamTransformer<List<int>, Uint8List>.fromHandlers(
       handleData: (data, sink) {
-        final decrypted = _encrypter.decryptBytes(encrypt.Encrypted(Uint8List.fromList(data)), iv: _iv);
-        sink.add(decrypted);
+        try {
+          final decrypted = decrypter.decryptBytes(encrypt.Encrypted(Uint8List.fromList(data)), iv: iv);
+          sink.add(Uint8List.fromList(decrypted));
+        } catch (e) {
+          print('Decryption error: $e');
+          sink.addError(e);
+        }
+      },
+      handleError: (error, stackTrace, sink) {
+        sink.addError(error, stackTrace);
+      },
+      handleDone: (sink) {
+        sink.close();
       },
     ));
   }
