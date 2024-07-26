@@ -1,5 +1,3 @@
-// ignore_for_file: prefer_const_constructors
-
 import 'package:flutter/material.dart';
 import 'pages/send_file.dart';
 import 'pages/receive_file.dart';
@@ -17,7 +15,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: MainPage(), // Start with MainPage as the home page
+      home: MainPage(),
     );
   }
 }
@@ -30,37 +28,49 @@ class MainPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('File Sharing App'),
+        centerTitle: true,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Row(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            SizedBox(
-              width: 200, // Fixed width for the ListView
-              child: ListView.builder(
-                itemCount: menuItems.length,
-                itemBuilder: (context, index) {
-                  return NavigationButton(
-                    title: menuItems[index],
+            ...menuItems.map((item) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
                     onPressed: () {
-                      if (index == 0) {
+                      if (item == 'Receive File') {
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => ReceiveFilePage()),
                         );
-                      } else if (index == 1) {
+                      } else if (item == 'Send File') {
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => SendFilePage()),
                         );
                       }
                     },
-                  );
-                },
-              ),
-            ),
-            SizedBox(width: 32), // Add some spacing between the ListView and the text
-            Expanded(
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.blue,
+                      backgroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 50),
+                      textStyle: const TextStyle(fontSize: 18),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                    ),
+                    child: Text(item),
+                  ),
+                ),
+              );
+            }).toList(),
+            const SizedBox(height: 32),
+            const Expanded(
               child: Center(
                 child: Text(
                   'File Sharing App',
@@ -69,38 +79,6 @@ class MainPage extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class NavigationButton extends StatelessWidget {
-  final String title;
-  final VoidCallback onPressed;
-
-  NavigationButton({
-    required this.title,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed: onPressed,
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(200, 50),
-            textStyle: const TextStyle(fontSize: 18),
-            padding: const EdgeInsets.symmetric(vertical: 10),
-          ),
-          child: Text(
-            title,
-            style: TextStyle(fontSize: 18),
-          ),
         ),
       ),
     );

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io';
-import 'package:local_file_sharing/network_helper.dart'; // Make sure this path is correct
+import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
 
 class SendFilePage extends StatefulWidget {
   @override
@@ -59,6 +59,7 @@ class _SendFilePageState extends State<SendFilePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Send File'),
+        centerTitle: true,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -69,9 +70,14 @@ class _SendFilePageState extends State<SendFilePage> {
               label: const Text('Select File'),
               onPressed: selectFile,
               style: ElevatedButton.styleFrom(
+                foregroundColor: Colors.blue,
+                backgroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 50),
                 textStyle: const TextStyle(fontSize: 18),
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -86,61 +92,71 @@ class _SendFilePageState extends State<SendFilePage> {
               label: const Text('Send File'),
               onPressed: sendFile,
               style: ElevatedButton.styleFrom(
+                foregroundColor: Colors.blue,
+                backgroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 50),
                 textStyle: const TextStyle(fontSize: 18),
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
               ),
             ),
             const SizedBox(height: 20),
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
+              child: Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const Text(
-                      'Available Devices',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Text(
+                        'Available Devices',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: StreamBuilder<List<String>>(
-                        stream: networkHelper.devicesStream,
-                        builder: (context, snapshot) {
-                          if (snapshot.hasData) {
-                            List<String> discoveredDevices = snapshot.data!;
-                            return ListView.builder(
-                              itemCount: discoveredDevices.length,
-                              itemBuilder: (context, index) {
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(vertical: 8),
-                                  child: ListTile(
-                                    leading: const Icon(Icons.devices),
-                                    title: Text(discoveredDevices[index]),
-                                    onTap: () {
-                                      setState(() {
-                                        selectedDevice = discoveredDevices[index];
-                                      });
-                                      print('Device selected: ${discoveredDevices[index]}');
-                                    },
-                                  ),
-                                );
-                              },
-                            );
-                          } else {
-                            return Center(child: CircularProgressIndicator());
-                          }
-                        },
+                      const SizedBox(height: 10),
+                      Expanded(
+                        child: StreamBuilder<List<String>>(
+                          stream: networkHelper.devicesStream,
+                          builder: (context, snapshot) {
+                            if (snapshot.hasData) {
+                              List<String> discoveredDevices = snapshot.data!;
+                              return ListView.builder(
+                                itemCount: discoveredDevices.length,
+                                itemBuilder: (context, index) {
+                                  return Card(
+                                    margin: const EdgeInsets.symmetric(vertical: 8),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: ListTile(
+                                      leading: const Icon(Icons.devices),
+                                      title: Text(discoveredDevices[index]),
+                                      onTap: () {
+                                        setState(() {
+                                          selectedDevice = discoveredDevices[index];
+                                        });
+                                        print('Device selected: ${discoveredDevices[index]}');
+                                      },
+                                    ),
+                                  );
+                                },
+                              );
+                            } else {
+                              return Center(child: CircularProgressIndicator());
+                            }
+                          },
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

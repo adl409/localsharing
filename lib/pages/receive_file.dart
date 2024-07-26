@@ -62,41 +62,56 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Receive File'),
+        title: const Text('Receive File'),
+        centerTitle: true,
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            ipAddress != null
-                ? Text(
-                    'IP Address: $ipAddress\nPort: $port',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 18),
-                  )
-                : CircularProgressIndicator(),
-            SizedBox(height: 20),
-            saveDirectory != null
-                ? Text(
-                    'Saving to: $saveDirectory',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 18),
-                  )
-                : ElevatedButton(
-                    onPressed: _pickSaveDirectory,
-                    child: Text('Select Save Directory'),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              if (ipAddress != null)
+                Text(
+                  'IP Address: $ipAddress\nPort: $port',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 18),
+                )
+              else
+                const CircularProgressIndicator(),
+              const SizedBox(height: 20),
+              if (saveDirectory != null)
+                Text(
+                  'Saving to: $saveDirectory',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 18),
+                )
+              else
+                ElevatedButton(
+                  onPressed: _pickSaveDirectory,
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.blue,
+                    minimumSize: const Size(double.infinity, 50),
+                    textStyle: const TextStyle(fontSize: 18),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
                   ),
-            SizedBox(height: 20),
-            saveDirectory != null
-                ? Text(
-                    'Waiting for files...',
-                    style: TextStyle(fontSize: 18),
-                  )
-                : Container(),
-            saveDirectory != null
-                ? CircularProgressIndicator()
-                : Container(),
-          ],
+                  child: const Text('Select Save Directory'),
+                ),
+              const SizedBox(height: 20),
+              if (saveDirectory != null) ...[
+                const Text(
+                  'Waiting for files...',
+                  style: TextStyle(fontSize: 18),
+                ),
+                const SizedBox(height: 20),
+                const CircularProgressIndicator(),
+              ],
+            ],
+          ),
         ),
       ),
     );
