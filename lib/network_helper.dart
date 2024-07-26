@@ -133,24 +133,21 @@ Future<void> sendFile(File file, String deviceAddress, {bool encryptData = false
     // Serialize metadata to JSON
     final metadata = jsonEncode({'fileName': fileName, 'fileSize': fileSize});
     socket.write('$metadata\n');
-
-    // Wait for acknowledgment
     await socket.flush();
 
     final fileStream = file.openRead();
     final encrypter = encrypt.Encrypter(encrypt.AES(_key));
+
     final encryptStream = encryptData
-        ? fileStream.transform(StreamTransformer<List<int>, List<int>>.fromHandlers(
-            handleData: (data, sink) {
-              final base64Data = base64Encode(data); // Convert to base64 String
-              final encrypted = encrypter.encrypt(base64Data, iv: _iv);
-              sink.add(encrypted.bytes); // Encrypted data as bytes
-            },
-          ))
-        : fileStream;
+      ? fileStream.transform(StreamTransformer<List<int>, Uint8List>.fromHandlers(
+          handleData: (data, sink) {
+            final encrypted = encrypter.encryptBytes(Uint8List.fromList(data), iv: _iv);
+            sink.add(encrypted.bytes);
+          },
+        ))
+      : fileStream;
 
     await encryptStream.pipe(socket);
-
     await socket.close();
     logger.i('File sent successfully');
   } catch (e) {
@@ -158,6 +155,7 @@ Future<void> sendFile(File file, String deviceAddress, {bool encryptData = false
     throw e;
   }
 }
+
 
 
   ServerSocket? _serverSocket;
@@ -206,7 +204,6 @@ Future<void> handleClientConnection(Socket client, String savePath, {bool encryp
     IOSink? fileSink;
     int bytesRead = 0;
 
-    // Create encrypter instance
     final encrypter = encrypt.Encrypter(encrypt.AES(_key));
 
     await client.listen(
@@ -232,8 +229,6 @@ Future<void> handleClientConnection(Socket client, String savePath, {bool encryp
             // Initialize file sink
             String filePath = path.join(savePath, fileName);
             fileSink = File(filePath).openWrite();
-
-            // Remove metadata part from buffer
             buffer.clear();
           }
         }
@@ -242,8 +237,8 @@ Future<void> handleClientConnection(Socket client, String savePath, {bool encryp
           List<int> decryptedData;
           if (encryptData) {
             final encrypted = encrypt.Encrypted(Uint8List.fromList(data));
-            final decryptedBase64 = encrypter.decrypt(encrypted, iv: _iv);
-            decryptedData = base64Decode(decryptedBase64); // Convert from base64 String to bytes
+            final decrypted = encrypter.decryptBytes(encrypted, iv: _iv);
+            decryptedData = decrypted;
           } else {
             decryptedData = data;
           }
@@ -282,6 +277,7 @@ Future<void> handleClientConnection(Socket client, String savePath, {bool encryp
     await client.close();
   }
 }
+
 
 
 
