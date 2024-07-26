@@ -141,7 +141,7 @@ class NetworkHelper {
 
       // Encrypt and send the file data in chunks
       final fileStream = file.openRead();
-      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
+      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.ctr));
 
       // Generate a new IV for this file
       final iv = encrypt.IV.fromLength(16);
@@ -207,7 +207,7 @@ class NetworkHelper {
       int bytesRead = 0;
       encrypt.IV? iv;
 
-      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
+      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.ctr));
 
       await client.listen(
         (List<int> data) async {
@@ -302,6 +302,8 @@ class NetworkHelper {
       await client.close();
     }
   }
+
+
 
   void stopReceiving() {
     _serverSocket?.close();
