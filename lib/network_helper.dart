@@ -116,7 +116,7 @@ class NetworkHelper {
         String message = String.fromCharCodes(datagram.data);
         if (message.trim() == 'RESPONSE') {
           String deviceAddress = datagram.address.address;
-          if (deviceAddress != _localIPAddress && !devices.contains(deviceAddress) ) {
+          if (deviceAddress != _localIPAddress && !devices.contains(deviceAddress)) {
             devices.add(deviceAddress);
             _devicesController.add(devices.toList()); // Notify listeners
           }
@@ -125,38 +125,38 @@ class NetworkHelper {
     }
   }
 
-Future<void> sendFile(File file, String deviceAddress) async {
-  try {
-    final socket = await Socket.connect(deviceAddress, port);
-    logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
+  Future<void> sendFile(File file, String deviceAddress) async {
+    try {
+      final socket = await Socket.connect(deviceAddress, port);
+      logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
 
-    final fileName = path.basename(file.path);
-    final fileSize = await file.length();
+      final fileName = path.basename(file.path);
+      final fileSize = await file.length();
 
-    // Serialize metadata to JSON
-    final metadata = jsonEncode({'fileName': fileName, 'fileSize': fileSize});
-    socket.write('$metadata\n');
+      // Serialize metadata to JSON
+      final metadata = jsonEncode({'fileName': fileName, 'fileSize': fileSize});
+      socket.write('$metadata\n');
 
-    // Wait for acknowledgment
-    await socket.flush();
+      // Wait for acknowledgment
+      await socket.flush();
 
-    // Encrypt and send the file data
-    final fileStream = file.openRead();
-    final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
-    final iv = encrypt.IV.fromLength(16); // Generate a new IV for each file transfer
+      // Encrypt and send the file data
+      final fileStream = file.openRead();
+      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
+      final iv = encrypt.IV.fromLength(16); // Generate a new IV for each file transfer
 
-    await for (var data in fileStream) {
-      final encrypted = encrypter.encryptBytes(data, iv: iv);
-      socket.add(encrypted.bytes);
+      await for (var data in fileStream) {
+        final encrypted = encrypter.encryptBytes(data, iv: iv);
+        socket.add(encrypted.bytes);
+      }
+
+      await socket.close();
+      logger.i('File sent successfully');
+    } catch (e) {
+      logger.e('Error sending file: $e');
+      throw e;
     }
-
-    await socket.close();
-    logger.i('File sent successfully');
-  } catch (e) {
-    logger.e('Error sending file: $e');
-    throw e;
   }
-}
 
   ServerSocket? _serverSocket;
 
@@ -282,5 +282,3 @@ Future<void> sendFile(File file, String deviceAddress) async {
     logger.i('Stopped receiving files');
   }
 }
-
-
