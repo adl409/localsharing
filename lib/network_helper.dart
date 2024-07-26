@@ -26,7 +26,6 @@ class NetworkHelper {
   String? _saveDirectory; // Variable to store selected save directory
 
   final encrypt.Key _key = encrypt.Key.fromLength(32); // AES key
-  final encrypt.IV _iv = encrypt.IV.fromLength(16); // AES IV
 
   String? _localIPAddress;
 
@@ -143,7 +142,10 @@ class NetworkHelper {
       // Encrypt and send the file data in chunks
       final fileStream = file.openRead();
       final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
-      final iv = encrypt.IV.fromLength(16); // Generate a new IV for each file transfer
+
+      // Generate a new IV for this file
+      final iv = encrypt.IV.fromLength(16);
+      socket.add(iv.bytes); // Send IV before file data
 
       await for (var chunk in fileStream) {
         final encrypted = encrypter.encryptBytes(chunk, iv: iv);
@@ -203,6 +205,7 @@ class NetworkHelper {
       int? fileSize;
       IOSink? fileSink;
       int bytesRead = 0;
+      encrypt.IV? iv;
 
       final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
 
@@ -230,17 +233,33 @@ class NetworkHelper {
               String filePath = path.join(savePath, fileName);
               fileSink = File(filePath).openWrite();
 
-              // Remove metadata part from buffer
-              buffer.clear();
-            }
-          }
+              // Extract IV from the beginning of the data
+              final ivBytes = Uint8List.fromList(data.take(16).toList());
+              iv = encrypt.IV(ivBytes);
 
-          if (metadataProcessed && fileSink != null) {
+              // Remove IV bytes from data
+              final fileData = data.skip(16).toList();
+              if (fileData.isNotEmpty) {
+                final decrypted = encrypter.decryptBytes(
+                  encrypt.Encrypted(Uint8List.fromList(fileData)),
+                  iv: iv,
+                );
+                bytesRead += decrypted.length;
+                fileSink!.add(decrypted);
+
+                if (bytesRead >= fileSize!) {
+                  await fileSink!.close();
+                  logger.i('File received: ${path.join(savePath, fileName!)}');
+                  await client.close();
+                }
+              }
+            }
+          } else if (fileSink != null) {
             try {
               // Decrypt and write file data in chunks
               final decrypted = encrypter.decryptBytes(
                 encrypt.Encrypted(Uint8List.fromList(data)),
-                iv: _iv,
+                iv: iv!,
               );
               bytesRead += decrypted.length;
               fileSink!.add(decrypted);
