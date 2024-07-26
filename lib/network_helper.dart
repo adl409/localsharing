@@ -6,7 +6,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:logger/logger.dart';
 import 'package:path/path.dart' as path;
 import 'package:network_info_plus/network_info_plus.dart';
-import 'encryption.dart';
 
 class NetworkHelper {
   static const String multicastAddress = '239.0.0.0';
@@ -22,15 +21,8 @@ class NetworkHelper {
 
   Logger logger = Logger();
   final NetworkInfo _networkInfo = NetworkInfo();
-  final EncryptionHelper _encryptionHelper;
 
   String? _saveDirectory; // Variable to store selected save directory
-
-  NetworkHelper()
-      : _encryptionHelper = EncryptionHelper(
-          'U2FsdGVkX1+M6z8zA6OBb1aLJ/EkOn5i5MTRk5biZC4=', // Replace with your base64-encoded key
-          'U2FsdGVkX1+U3V39XQ1FvA==',  // Replace with your base64-encoded IV
-        );
 
   Future<void> startMulticasting() async {
     try {
@@ -73,7 +65,7 @@ class NetworkHelper {
         timer.cancel();
       } else {
         try {
-          // Convert String 'RESPONSE' to Uint8List and send multicast packet
+          // Convert String 'DISCOVER' to Uint8List and send multicast packet
           Uint8List data = Uint8List.fromList('RESPONSE'.codeUnits);
           _socket!.send(data, InternetAddress(multicastAddress), port);
         } catch (e) {
@@ -141,12 +133,9 @@ class NetworkHelper {
       // Wait for acknowledgment
       await socket.flush();
 
-      // Encrypt and send the file data
+      // Send the file data
       final fileStream = file.openRead();
-      final encryptedStream = _encryptionHelper.encryptStream(fileStream);
-      await encryptedStream.forEach((chunk) {
-        socket.add(chunk);
-      });
+      await fileStream.pipe(socket);
 
       await socket.close();
       logger.i('File sent successfully');
@@ -191,84 +180,127 @@ class NetworkHelper {
     }
   }
 
-  Future<void> handleClientConnection(Socket client, String savePath) async {
-    logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
+void handleClientConnection(Socket client, String savePath) async {
+  logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
 
-    try {
-      final buffer = StringBuffer();
-      bool metadataProcessed = false;
-      String? fileName;
-      int? fileSize;
-      IOSink? fileSink;
-      int bytesRead = 0;
+  try {
+    final buffer = StringBuffer();
+    bool metadataProcessed = false;
+    String? fileName;
+    int? fileSize;
+    IOSink? fileSink;
+    int bytesRead = 0;
 
-      // Use a StreamTransformer for decryption
-      final decryptedStream = _encryptionHelper.decryptStream(client);
+    await client.listen(
+      (List<int> data) async {
+        if (!metadataProcessed) {
+          buffer.write(String.fromCharCodes(data));
+          if (buffer.toString().contains('\n')) {
+            metadataProcessed = true;
 
-      await decryptedStream.listen(
-        (List<int> data) async {
-          if (!metadataProcessed) {
-            buffer.write(String.fromCharCodes(data));
-            if (buffer.toString().contains('\n')) {
-              metadataProcessed = true;
+            final metadataJson = buffer.toString().split('\n').first;
+            logger.d('Received metadata: $metadataJson');
 
-              final metadataJson = buffer.toString().split('\n').first;
-              logger.d('Received metadata: $metadataJson');
+            final Map<String, dynamic> metadata = jsonDecode(metadataJson);
+            fileName = metadata['fileName'];
+            fileSize = metadata['fileSize'];
 
-              final Map<String, dynamic> metadata = jsonDecode(metadataJson);
-              fileName = metadata['fileName'];
-              fileSize = metadata['fileSize'];
-
-              if (fileName == null || fileSize == null || fileSize is! int) {
-                logger.e('Invalid metadata format: $metadataJson');
-                await client.close();
-                return;
-              }
-
-              // Initialize file sink
-              String filePath = path.join(savePath, fileName);
-              fileSink = File(filePath).openWrite();
-
-              // Remove metadata part from buffer
-              buffer.clear();
-            }
-          }
-
-          if (metadataProcessed && fileSink != null) {
-            bytesRead += data.length;
-            fileSink!.add(data);
-
-            if (bytesRead >= fileSize!) {
-              await fileSink!.close();
-              logger.i('File received: ${path.join(savePath, fileName!)}');
+            if (fileName == null || fileSize == null || fileSize is! int) {
+              logger.e('Invalid metadata format: $metadataJson');
               await client.close();
+              return;
             }
+
+            // Initialize file sink
+            String filePath = path.join(savePath, fileName);
+            fileSink = File(filePath).openWrite();
+
+            // Remove metadata part from buffer
+            buffer.clear();
           }
-        },
-        onError: (error) async {
-          logger.e('Error receiving file data: $error');
-          if (fileSink != null) {
+        }
+
+        if (metadataProcessed && fileSink != null) {
+          bytesRead += data.length;
+          fileSink!.add(data);
+
+          if (bytesRead >= fileSize!) {
             await fileSink!.close();
-            await File(path.join(savePath, fileName!)).delete(); // Clean up the partially written file
+            logger.i('File received: ${path.join(savePath, fileName!)}');
+            await client.close();
           }
-          await client.close();
-        },
-        onDone: () async {
-          if (fileSink != null) {
-            await fileSink!.close();
-            if (bytesRead < fileSize!) {
-              logger.w('File transfer incomplete. Expected $fileSize bytes, but received $bytesRead bytes.');
-            }
+        }
+      },
+      onError: (error) async {
+        logger.e('Error receiving file data: $error');
+        if (fileSink != null) {
+          await fileSink!.close();
+          await File(path.join(savePath, fileName!)).delete(); // Clean up the partially written file
+        }
+        await client.close();
+      },
+      onDone: () async {
+        if (fileSink != null) {
+          await fileSink!.close();
+          if (bytesRead < fileSize!) {
+            logger.w('File transfer incomplete. Expected $fileSize bytes, but received $bytesRead bytes.');
           }
-          await client.close();
-        },
-        cancelOnError: true,
-      ).asFuture();
-    } catch (e) {
-      logger.e('Error processing client connection: $e');
-      await client.close();
-    }
+        }
+        await client.close();
+      },
+      cancelOnError: true,
+    ).asFuture();
+  } catch (e) {
+    logger.e('Error processing client connection: $e');
+    await client.close();
   }
+}
+
+
+Future<void> processMetadata(String buffer, Socket client, String savePath) async {
+  final metadataJson = buffer.split('\n').first;
+  logger.d('Received metadata: $metadataJson');
+
+  final Map<String, dynamic> metadata = jsonDecode(metadataJson);
+  final String? fileName = metadata['fileName'];
+  final dynamic fileSize = metadata['fileSize'];
+
+  if (fileName == null || fileSize == null || fileSize is! int) {
+    logger.e('Invalid metadata format: $metadataJson');
+    await client.close();
+    return;
+  }
+
+  // Resume the subscription for file data
+  String filePath = path.join(savePath, fileName);
+  await _receiveFileData(client, filePath, fileSize);
+}
+
+Future<void> _receiveFileData(Socket client, String filePath, int fileSize) async {
+  File file = File(filePath);
+  IOSink fileSink = file.openWrite();
+  int bytesRead = 0;
+
+  await client.listen(
+    (List<int> data) {
+      bytesRead += data.length;
+      fileSink.add(data);
+    },
+    onError: (error) async {
+      logger.e('Error receiving file data: $error');
+      await fileSink.close();
+      await file.delete(); // Clean up the partially written file
+    },
+    onDone: () async {
+      await fileSink.close();
+      if (bytesRead < fileSize) {
+        logger.w('File transfer incomplete. Expected $fileSize bytes, but received $bytesRead bytes.');
+      }
+    },
+    cancelOnError: true,
+  ).asFuture();
+}
+
 
   void stopReceiving() {
     _serverSocket?.close();
@@ -276,4 +308,3 @@ class NetworkHelper {
     logger.i('Stopped receiving files');
   }
 }
-
