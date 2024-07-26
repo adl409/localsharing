@@ -28,8 +28,8 @@ class NetworkHelper {
 
   NetworkHelper()
       : _encryptionHelper = EncryptionHelper(
-          'your-32-char-base64-encoded-key', // Replace with your base64-encoded key
-          'your-16-char-base64-encoded-iv',  // Replace with your base64-encoded IV
+          'U2FsdGVkX1+M6z8zA6OBb1aLJ/EkOn5i5MTRk5biZC4=', // Replace with your base64-encoded key
+          'U2FsdGVkX1+U3V39XQ1FvA==',  // Replace with your base64-encoded IV
         );
 
   Future<void> startMulticasting() async {
