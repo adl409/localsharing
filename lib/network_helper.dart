@@ -28,10 +28,13 @@ class NetworkHelper {
   final encrypt.Key _key = encrypt.Key.fromLength(32); // AES key
   final encrypt.IV _iv = encrypt.IV.fromLength(16); // AES IV
 
+  String? _localIPAddress;
+
   Future<void> startMulticasting() async {
     try {
       String? wifiIP = await _networkInfo.getWifiIP();
       String? wifiName = await _networkInfo.getWifiName();
+      _localIPAddress = wifiIP;
       logger.i('WiFi Name: $wifiName, IP: $wifiIP');
 
       _socket = await RawDatagramSocket.bind(
@@ -113,7 +116,7 @@ class NetworkHelper {
         String message = String.fromCharCodes(datagram.data);
         if (message.trim() == 'RESPONSE') {
           String deviceAddress = datagram.address.address;
-          if (!devices.contains(deviceAddress)) {
+          if (!devices.contains(deviceAddress) && deviceAddress != _localIPAddress) {
             devices.add(deviceAddress);
             _devicesController.add(devices.toList()); // Notify listeners
           }
