@@ -6,13 +6,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:logger/logger.dart';
 import 'package:path/path.dart' as path;
 import 'package:network_info_plus/network_info_plus.dart';
-import 'encryption.dart'; // Import the EncryptionHelper
+import 'encryption.dart';
 
 class NetworkHelper {
   static const String multicastAddress = '239.0.0.0';
   static const int port = 5555;
-  static const String encryptionKey = 'H4WtkvK4qyehIe2kjQfH7we1xIHFK67e'; // 32 chars for AES-256
-  static const String encryptionIv = 'HgNRbGHbDSz9T0CC'; // 16 chars for AES
 
   RawDatagramSocket? _socket;
   bool _isClosed = true;
@@ -29,7 +27,10 @@ class NetworkHelper {
   String? _saveDirectory; // Variable to store selected save directory
 
   NetworkHelper()
-      : _encryptionHelper = EncryptionHelper(encryptionKey, encryptionIv);
+      : _encryptionHelper = EncryptionHelper(
+          'your-32-char-base64-encoded-key', // Replace with your base64-encoded key
+          'your-16-char-base64-encoded-iv',  // Replace with your base64-encoded IV
+        );
 
   Future<void> startMulticasting() async {
     try {
@@ -72,6 +73,7 @@ class NetworkHelper {
         timer.cancel();
       } else {
         try {
+          // Convert String 'RESPONSE' to Uint8List and send multicast packet
           Uint8List data = Uint8List.fromList('RESPONSE'.codeUnits);
           _socket!.send(data, InternetAddress(multicastAddress), port);
         } catch (e) {
@@ -124,7 +126,7 @@ class NetworkHelper {
     }
   }
 
-  Future<void> sendFile(File file, String deviceAddress, {bool encrypt = false}) async {
+  Future<void> sendFile(File file, String deviceAddress) async {
     try {
       final socket = await Socket.connect(deviceAddress, port);
       logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
@@ -139,16 +141,12 @@ class NetworkHelper {
       // Wait for acknowledgment
       await socket.flush();
 
-      // Send the file data
+      // Encrypt and send the file data
       final fileStream = file.openRead();
-      if (encrypt) {
-        fileStream.transform(Utf8Encoder() as StreamTransformer<List<int>, dynamic>).listen((data) {
-          final encryptedData = _encryptionHelper.encryptData(Uint8List.fromList(data));
-          socket.add(encryptedData);
-        });
-      } else {
-        await fileStream.pipe(socket);
-      }
+      final encryptedStream = _encryptionHelper.encryptStream(fileStream);
+      await encryptedStream.forEach((chunk) {
+        socket.add(chunk);
+      });
 
       await socket.close();
       logger.i('File sent successfully');
@@ -193,7 +191,7 @@ class NetworkHelper {
     }
   }
 
-  void handleClientConnection(Socket client, String savePath) async {
+  Future<void> handleClientConnection(Socket client, String savePath) async {
     logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
 
     try {
@@ -204,7 +202,10 @@ class NetworkHelper {
       IOSink? fileSink;
       int bytesRead = 0;
 
-      await client.listen(
+      // Use a StreamTransformer for decryption
+      final decryptedStream = _encryptionHelper.decryptStream(client);
+
+      await decryptedStream.listen(
         (List<int> data) async {
           if (!metadataProcessed) {
             buffer.write(String.fromCharCodes(data));
@@ -234,15 +235,13 @@ class NetworkHelper {
           }
 
           if (metadataProcessed && fileSink != null) {
-            if (bytesRead < fileSize!) {
-              final decryptedData = _encryptionHelper.decryptData(Uint8List.fromList(data));
-              fileSink!.add(decryptedData);
-              bytesRead += decryptedData.length;
-              if (bytesRead >= fileSize!) {
-                await fileSink!.close();
-                logger.i('File received: ${path.join(savePath, fileName!)}');
-                await client.close();
-              }
+            bytesRead += data.length;
+            fileSink!.add(data);
+
+            if (bytesRead >= fileSize!) {
+              await fileSink!.close();
+              logger.i('File received: ${path.join(savePath, fileName!)}');
+              await client.close();
             }
           }
         },
@@ -277,3 +276,4 @@ class NetworkHelper {
     logger.i('Stopped receiving files');
   }
 }
+
