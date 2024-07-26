@@ -140,13 +140,15 @@ class NetworkHelper {
       // Wait for acknowledgment
       await socket.flush();
 
-      // Encrypt and send the file data
-      final fileBytes = await file.readAsBytes();
+      // Encrypt and send the file data in chunks
+      final fileStream = file.openRead();
       final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
       final iv = encrypt.IV.fromLength(16); // Generate a new IV for each file transfer
-      final encryptedBytes = encrypter.encryptBytes(fileBytes, iv: iv);
 
-      socket.add(encryptedBytes.bytes);
+      await for (var chunk in fileStream) {
+        final encrypted = encrypter.encryptBytes(chunk, iv: iv);
+        socket.add(encrypted.bytes);
+      }
 
       await socket.close();
       logger.i('File sent successfully');
@@ -234,26 +236,26 @@ class NetworkHelper {
           }
 
           if (metadataProcessed && fileSink != null) {
-            // Decrypt and write file data
             try {
+              // Decrypt and write file data in chunks
               final decrypted = encrypter.decryptBytes(
                 encrypt.Encrypted(Uint8List.fromList(data)),
                 iv: _iv,
               );
               bytesRead += decrypted.length;
               fileSink!.add(decrypted);
+
+              if (bytesRead >= fileSize!) {
+                await fileSink!.close();
+                logger.i('File received: ${path.join(savePath, fileName!)}');
+                await client.close();
+              }
             } catch (e) {
               logger.e('Decryption error: $e');
               await fileSink!.close();
-              await File(path.join(savePath, fileName!)).delete();
+              await File(path.join(savePath, fileName!)).delete(); // Clean up the partially written file
               await client.close();
               return;
-            }
-
-            if (bytesRead >= fileSize!) {
-              await fileSink!.close();
-              logger.i('File received: ${path.join(savePath, fileName!)}');
-              await client.close();
             }
           }
         },
