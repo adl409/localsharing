@@ -28,13 +28,10 @@ class NetworkHelper {
   final encrypt.Key _key = encrypt.Key.fromLength(32); // AES key
   final encrypt.IV _iv = encrypt.IV.fromLength(16); // AES IV
 
-  String? _localIPAddress; // Store local device IP address
-
   Future<void> startMulticasting() async {
     try {
       String? wifiIP = await _networkInfo.getWifiIP();
       String? wifiName = await _networkInfo.getWifiName();
-      _localIPAddress = wifiIP;
       logger.i('WiFi Name: $wifiName, IP: $wifiIP');
 
       _socket = await RawDatagramSocket.bind(
@@ -73,7 +70,7 @@ class NetworkHelper {
       } else {
         try {
           // Convert String 'DISCOVER' to Uint8List and send multicast packet
-          Uint8List data = Uint8List.fromList('DISCOVER'.codeUnits);
+          Uint8List data = Uint8List.fromList('RESPONSE'.codeUnits);
           _socket!.send(data, InternetAddress(multicastAddress), port);
         } catch (e) {
           logger.e('Error sending multicast packet: $e');
@@ -97,7 +94,7 @@ class NetworkHelper {
             Datagram? datagram = socket.receive();
             if (datagram != null) {
               String message = String.fromCharCodes(datagram.data);
-              if (message.trim() == 'DISCOVER') {
+              if (message.trim() == 'RESPONSE') {
                 socket.send(Uint8List.fromList('RESPONSE'.codeUnits), datagram.address, datagram.port);
               }
             }
@@ -116,7 +113,7 @@ class NetworkHelper {
         String message = String.fromCharCodes(datagram.data);
         if (message.trim() == 'RESPONSE') {
           String deviceAddress = datagram.address.address;
-          if (deviceAddress != _localIPAddress && !devices.contains(deviceAddress)) {
+          if (!devices.contains(deviceAddress)) {
             devices.add(deviceAddress);
             _devicesController.add(devices.toList()); // Notify listeners
           }
@@ -142,7 +139,7 @@ class NetworkHelper {
 
       // Encrypt and send the file data
       final fileStream = file.openRead();
-      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc));
+      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding:null));
 
       await for (var data in fileStream) {
         final encrypted = encrypter.encryptBytes(data, iv: _iv);
@@ -203,7 +200,7 @@ class NetworkHelper {
       IOSink? fileSink;
       int bytesRead = 0;
 
-      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc));
+      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding:null));
 
       await client.listen(
         (List<int> data) async {
@@ -232,7 +229,9 @@ class NetworkHelper {
               // Remove metadata part from buffer
               buffer.clear();
             }
-          } else if (metadataProcessed && fileSink != null) {
+          }
+
+          if (metadataProcessed && fileSink != null) {
             // Decrypt and write file data
             final decrypted = encrypter.decryptBytes(
               encrypt.Encrypted(Uint8List.fromList(data)),
@@ -279,3 +278,5 @@ class NetworkHelper {
     logger.i('Stopped receiving files');
   }
 }
+
+

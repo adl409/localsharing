@@ -64,46 +64,39 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
       appBar: AppBar(
         title: Text('Receive File'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              if (ipAddress != null)
-                Text(
-                  'IP Address: $ipAddress\nPort: $port',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 18),
-                )
-              else
-                CircularProgressIndicator(),
-              SizedBox(height: 20),
-              if (saveDirectory != null)
-                Text(
-                  'Saving to: $saveDirectory',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 18),
-                )
-              else
-                ElevatedButton(
-                  onPressed: _pickSaveDirectory,
-                  child: Text('Select Save Directory'),
-                  style: ElevatedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            ipAddress != null
+                ? Text(
+                    'IP Address: $ipAddress\nPort: $port',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 18),
+                  )
+                : CircularProgressIndicator(),
+            SizedBox(height: 20),
+            saveDirectory != null
+                ? Text(
+                    'Saving to: $saveDirectory',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 18),
+                  )
+                : ElevatedButton(
+                    onPressed: _pickSaveDirectory,
+                    child: Text('Select Save Directory'),
                   ),
-                ),
-              SizedBox(height: 20),
-              if (saveDirectory != null) ...[
-                Text(
-                  'Waiting for files...',
-                  style: TextStyle(fontSize: 18),
-                ),
-                SizedBox(height: 20),
-                CircularProgressIndicator(),
-              ],
-            ],
-          ),
+            SizedBox(height: 20),
+            saveDirectory != null
+                ? Text(
+                    'Waiting for files...',
+                    style: TextStyle(fontSize: 18),
+                  )
+                : Container(),
+            saveDirectory != null
+                ? CircularProgressIndicator()
+                : Container(),
+          ],
         ),
       ),
     );
