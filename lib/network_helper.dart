@@ -139,7 +139,7 @@ class NetworkHelper {
 
       // Encrypt and send the file data
       final fileStream = file.openRead();
-      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc));
+      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding:null));
 
       await for (var data in fileStream) {
         final encrypted = encrypter.encryptBytes(data, iv: _iv);
@@ -200,7 +200,7 @@ class NetworkHelper {
       IOSink? fileSink;
       int bytesRead = 0;
 
-      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc));
+      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding:null));
 
       await client.listen(
         (List<int> data) async {
