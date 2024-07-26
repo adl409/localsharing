@@ -122,7 +122,7 @@ class NetworkHelper {
     }
   }
 
-Future<void> sendFile(File file, String deviceAddress, {bool encryptData = false}) async {
+Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}) async {
   try {
     final socket = await Socket.connect(deviceAddress, port);
     logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
@@ -130,31 +130,61 @@ Future<void> sendFile(File file, String deviceAddress, {bool encryptData = false
     final fileName = path.basename(file.path);
     final fileSize = await file.length();
 
+
     // Serialize metadata to JSON
-    final metadata = jsonEncode({'fileName': fileName, 'fileSize': fileSize});
+    final metadata = jsonEncode({'fileName': fileName, 'fileSize': fileSize, 'isEncrypted': encryptData});
     socket.write('$metadata\n');
     await socket.flush();
 
     final fileStream = file.openRead();
     final encrypter = encrypt.Encrypter(encrypt.AES(_key));
 
-    final encryptStream = encryptData
-      ? fileStream.transform(StreamTransformer<List<int>, Uint8List>.fromHandlers(
-          handleData: (data, sink) {
-            final encrypted = encrypter.encryptBytes(Uint8List.fromList(data), iv: _iv);
-            sink.add(encrypted.bytes);
-          },
-        ))
-      : fileStream;
+    Stream<List<int>> encryptStream;
+    if (encryptData) {
+      // Transform the fileStream to an encrypted stream
+      encryptStream = fileStream.transform(StreamTransformer<List<int>, Uint8List>.fromHandlers(
+        handleData: (data, sink) {
+          final encrypted = encrypter.encryptBytes(Uint8List.fromList(data), iv: _iv);
+          sink.add(encrypted.bytes);
+        },
+        handleDone: (sink) {
+          sink.close();
+          logger.i('Encryption completed.');
+        }
+      ));
+      logger.i('Encrypting the file...');
+    } else {
+      encryptStream = fileStream;
+    }
 
-    await encryptStream.pipe(socket);
-    await socket.close();
-    logger.i('File sent successfully');
+    // Handle sending the encrypted or plain data
+    await encryptStream.listen(
+      (data) {
+        socket.add(data);
+      },
+      onDone: () async {
+        await socket.flush();
+        await socket.close();
+        if (encryptData) {
+          logger.i('File encrypted and sent successfully.');
+        } else {
+          logger.i('File sent successfully without encryption.');
+        }
+      },
+      onError: (e) {
+        logger.e('Error sending file data: $e');
+      },
+      cancelOnError: true,
+    ).asFuture();
   } catch (e) {
     logger.e('Error sending file: $e');
     throw e;
   }
 }
+
+
+
+
 
 
 
@@ -193,7 +223,7 @@ Future<void> sendFile(File file, String deviceAddress, {bool encryptData = false
     }
   }
 
-Future<void> handleClientConnection(Socket client, String savePath, {bool encryptData = false}) async {
+Future<void> handleClientConnection(Socket client, String savePath) async {
   logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
 
   try {
@@ -203,11 +233,28 @@ Future<void> handleClientConnection(Socket client, String savePath, {bool encryp
     int? fileSize;
     IOSink? fileSink;
     int bytesRead = 0;
+    bool? isEncrypted;
 
     final encrypter = encrypt.Encrypter(encrypt.AES(_key));
+    final decryptStream = client.transform<Uint8List>(StreamTransformer.fromHandlers(
+      handleData: (data, sink) {
+        // Decrypt data if necessary
+        if (isEncrypted == true) { // Replace `isEncrypted` with your own condition to check if the data is encrypted
+          final encrypted = encrypt.Encrypted(Uint8List.fromList(data));
+          final decrypted = encrypter.decryptBytes(encrypted, iv: _iv);
+          sink.add(Uint8List.fromList(decrypted));
+        } else {
+          sink.add(data);
+        }
+      },
+      handleDone: (sink) {
+        sink.close();
+        logger.i('Decryption completed.');
+      }
+    ));
 
-    await client.listen(
-      (List<int> data) async {
+    await decryptStream.listen(
+      (data) async {
         if (!metadataProcessed) {
           buffer.write(String.fromCharCodes(data));
           if (buffer.toString().contains('\n')) {
@@ -229,23 +276,16 @@ Future<void> handleClientConnection(Socket client, String savePath, {bool encryp
             // Initialize file sink
             String filePath = path.join(savePath, fileName);
             fileSink = File(filePath).openWrite();
+
+            // Remove metadata part from buffer
             buffer.clear();
           }
         }
 
         if (metadataProcessed && fileSink != null) {
-          List<int> decryptedData;
-          if (encryptData) {
-            final encrypted = encrypt.Encrypted(Uint8List.fromList(data));
-            final decrypted = encrypter.decryptBytes(encrypted, iv: _iv);
-            decryptedData = decrypted;
-          } else {
-            decryptedData = data;
-          }
+          fileSink!.add(data);
 
-          fileSink!.add(decryptedData);
-          bytesRead += decryptedData.length;
-
+          bytesRead += data.length;
           if (bytesRead >= fileSize!) {
             await fileSink!.close();
             logger.i('File received: ${path.join(savePath, fileName!)}');
@@ -277,6 +317,7 @@ Future<void> handleClientConnection(Socket client, String savePath, {bool encryp
     await client.close();
   }
 }
+
 
 
 
