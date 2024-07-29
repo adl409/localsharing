@@ -136,6 +136,7 @@ Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}
     final metadata = jsonEncode({'fileName': fileName, 'fileSize': fileSize, 'isEncrypted': encryptData});
     socket.write('$metadata\n');
     await socket.flush();
+    logger.d('Sent metadata: $metadata');
 
     final fileStream = file.openRead();
     final encrypter = encrypt.Encrypter(encrypt.AES(_key));
@@ -144,11 +145,14 @@ Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}
     if (encryptData) {
       streamToSend = fileStream.transform(StreamTransformer.fromHandlers(
         handleData: (data, sink) {
+          logger.d('Encrypting data chunk of size ${data.length}');
           final encrypted = encrypter.encryptBytes(Uint8List.fromList(data), iv: _iv);
           sink.add(encrypted.bytes);
+          logger.d('Encrypted chunk size ${encrypted.bytes.length}');
         },
         handleDone: (sink) {
           sink.close();
+          logger.i('Encryption completed.');
         }
       ));
     } else {
@@ -157,6 +161,7 @@ Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}
 
     await streamToSend.listen(
       (data) {
+        logger.d('Sending data chunk of size ${data.length}');
         socket.add(data);
       },
       onDone: () async {
@@ -174,6 +179,7 @@ Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}
     throw e;
   }
 }
+
 
 
   ServerSocket? _serverSocket;
@@ -226,10 +232,12 @@ Future<void> handleClientConnection(Socket client, String savePath) async {
     final encrypter = encrypt.Encrypter(encrypt.AES(_key));
     final decryptStream = client.transform<Uint8List>(StreamTransformer.fromHandlers(
       handleData: (data, sink) {
+        logger.d('Received data chunk of size ${data.length}');
         try {
           if (isEncrypted == true) {
             final encrypted = encrypt.Encrypted(Uint8List.fromList(data));
             final decrypted = encrypter.decryptBytes(encrypted, iv: _iv);
+            logger.d('Decrypted data chunk of size ${decrypted.length}');
             sink.add(Uint8List.fromList(decrypted));
           } else {
             sink.add(data);
@@ -240,6 +248,7 @@ Future<void> handleClientConnection(Socket client, String savePath) async {
       },
       handleDone: (sink) {
         sink.close();
+        logger.i('Decryption completed.');
       }
     ));
 
@@ -266,6 +275,7 @@ Future<void> handleClientConnection(Socket client, String savePath) async {
 
             String filePath = path.join(savePath, fileName);
             fileSink = File(filePath).openWrite();
+            logger.i('Initialized file sink for $filePath');
             buffer.clear();
           }
         }
@@ -305,6 +315,7 @@ Future<void> handleClientConnection(Socket client, String savePath) async {
     await client.close();
   }
 }
+
 
 
 
