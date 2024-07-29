@@ -11,6 +11,7 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 class NetworkHelper {
   static const String multicastAddress = '239.0.0.0';
   static const int port = 5555;
+  static const int deviceTimeoutSeconds = 15;
 
   RawDatagramSocket? _socket;
   bool _isClosed = true;
@@ -18,7 +19,7 @@ class NetworkHelper {
   final _devicesController = StreamController<List<String>>.broadcast();
   Stream<List<String>> get devicesStream => _devicesController.stream;
 
-  List<String> devices = []; // List to store discovered devices
+  final Map<String, DateTime> _deviceLastSeen = {}; // Map to store devices and their last seen time
 
   Logger logger = Logger();
   final NetworkInfo _networkInfo = NetworkInfo();
@@ -50,6 +51,7 @@ class NetworkHelper {
       _socket!.listen(handleData); // Listen for incoming datagrams
       _isClosed = false;
       _sendDiscoveryPacket();
+      _startDeviceCleanupTimer();
 
       logger.i('Multicasting started successfully');
     } catch (e) {
@@ -116,74 +118,91 @@ class NetworkHelper {
         String message = String.fromCharCodes(datagram.data);
         if (message.trim() == 'RESPONSE') {
           String deviceAddress = datagram.address.address;
-          if (!devices.contains(deviceAddress)) {
-            devices.add(deviceAddress);
-            _devicesController.add(devices.toList()); // Notify listeners
-          }
+          _deviceLastSeen[deviceAddress] = DateTime.now();
+          _updateDevices();
         }
       }
     }
   }
 
-Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}) async {
-  try {
-    final socket = await Socket.connect(deviceAddress, port);
-    logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
-
-    final fileName = path.basename(file.path);
-    final fileSize = await file.length();
-
-    final metadata = jsonEncode({
-      'fileName': fileName,
-      'fileSize': fileSize,
-      'isEncrypted': encryptData,
-      'iv': _iv.base64 // Include IV in metadata
-    });
-    socket.write('$metadata\n');
-    await socket.flush();
-
-    final fileStream = file.openRead();
-    final encrypter = encrypt.Encrypter(encrypt.AES(_key));
-
-    Stream<List<int>> encryptStream;
-    if (encryptData) {
-      encryptStream = fileStream.transform(StreamTransformer<List<int>, Uint8List>.fromHandlers(
-        handleData: (data, sink) {
-          final encrypted = encrypter.encryptBytes(Uint8List.fromList(data), iv: _iv);
-          sink.add(encrypted.bytes);
-        },
-        handleDone: (sink) {
-          sink.close();
-          logger.i('Encryption completed.');
-        }
-      ));
-      logger.i('Encrypting the file...');
-    } else {
-      encryptStream = fileStream;
-    }
-
-    await encryptStream.listen(
-      (data) {
-        socket.add(data);
-      },
-      onDone: () async {
-        await socket.flush();
-        await socket.close();
-        logger.i(encryptData ? 'File encrypted and sent successfully.' : 'File sent successfully without encryption.');
-      },
-      onError: (e) {
-        logger.e('Error sending file data: $e');
-      },
-      cancelOnError: true,
-    ).asFuture();
-  } catch (e) {
-    logger.e('Error sending file: $e');
-    throw e;
+  void _updateDevices() {
+    List<String> activeDevices = _deviceLastSeen.keys.toList();
+    _devicesController.add(activeDevices);
+    logger.i('Active devices: $activeDevices');
   }
-}
 
+  void _startDeviceCleanupTimer() {
+    Timer.periodic(Duration(seconds: deviceTimeoutSeconds), (timer) {
+      if (_isClosed) {
+        timer.cancel();
+      } else {
+        _cleanupInactiveDevices();
+      }
+    });
+  }
 
+  void _cleanupInactiveDevices() {
+    DateTime now = DateTime.now();
+    _deviceLastSeen.removeWhere((device, lastSeen) => now.difference(lastSeen).inSeconds > deviceTimeoutSeconds);
+    _updateDevices();
+  }
 
+  Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}) async {
+    try {
+      final socket = await Socket.connect(deviceAddress, port);
+      logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
+
+      final fileName = path.basename(file.path);
+      final fileSize = await file.length();
+
+      final metadata = jsonEncode({
+        'fileName': fileName,
+        'fileSize': fileSize,
+        'isEncrypted': encryptData,
+        'iv': _iv.base64 // Include IV in metadata
+      });
+      socket.write('$metadata\n');
+      await socket.flush();
+
+      final fileStream = file.openRead();
+      final encrypter = encrypt.Encrypter(encrypt.AES(_key));
+
+      Stream<List<int>> encryptStream;
+      if (encryptData) {
+        encryptStream = fileStream.transform(StreamTransformer<List<int>, Uint8List>.fromHandlers(
+          handleData: (data, sink) {
+            final encrypted = encrypter.encryptBytes(Uint8List.fromList(data), iv: _iv);
+            sink.add(encrypted.bytes);
+          },
+          handleDone: (sink) {
+            sink.close();
+            logger.i('Encryption completed.');
+          }
+        ));
+        logger.i('Encrypting the file...');
+      } else {
+        encryptStream = fileStream;
+      }
+
+      await encryptStream.listen(
+        (data) {
+          socket.add(data);
+        },
+        onDone: () async {
+          await socket.flush();
+          await socket.close();
+          logger.i(encryptData ? 'File encrypted and sent successfully.' : 'File sent successfully without encryption.');
+        },
+        onError: (e) {
+          logger.e('Error sending file data: $e');
+        },
+        cancelOnError: true,
+      ).asFuture();
+    } catch (e) {
+      logger.e('Error sending file: $e');
+      throw e;
+    }
+  }
 
   ServerSocket? _serverSocket;
 
@@ -220,104 +239,100 @@ Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}
     }
   }
 
-Future<void> handleClientConnection(Socket client, String savePath) async {
-  logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
+  Future<void> handleClientConnection(Socket client, String savePath) async {
+    logger.i('Connection from ${client.remoteAddress.address}:${client.remotePort}');
 
-  try {
-    final buffer = StringBuffer();
-    bool metadataProcessed = false;
-    String? fileName;
-    int? fileSize;
-    IOSink? fileSink;
-    int bytesRead = 0;
-    bool? isEncrypted;
-    encrypt.IV? iv;
+    try {
+      final buffer = StringBuffer();
+      bool metadataProcessed = false;
+      String? fileName;
+      int? fileSize;
+      IOSink? fileSink;
+      int bytesRead = 0;
+      bool? isEncrypted;
+      encrypt.IV? iv;
 
-    final encrypter = encrypt.Encrypter(encrypt.AES(_key));
-    final decryptStream = client.transform<Uint8List>(StreamTransformer.fromHandlers(
-      handleData: (data, sink) {
-        if (isEncrypted == true) {
-          final encrypted = encrypt.Encrypted(Uint8List.fromList(data));
-          final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
-          sink.add(Uint8List.fromList(decrypted));
-        } else {
-          sink.add(data);
+      final encrypter = encrypt.Encrypter(encrypt.AES(_key));
+      final decryptStream = client.transform<Uint8List>(StreamTransformer.fromHandlers(
+        handleData: (data, sink) {
+          if (isEncrypted == true) {
+            final encrypted = encrypt.Encrypted(Uint8List.fromList(data));
+            final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
+            sink.add(Uint8List.fromList(decrypted));
+          } else {
+            sink.add(data);
+          }
+        },
+        handleDone: (sink) {
+          sink.close();
+          logger.i('Decryption completed.');
         }
-      },
-      handleDone: (sink) {
-        sink.close();
-        logger.i('Decryption completed.');
-      }
-    ));
+      ));
 
-    await decryptStream.listen(
-      (data) async {
-        if (!metadataProcessed) {
-          buffer.write(String.fromCharCodes(data));
-          if (buffer.toString().contains('\n')) {
-            metadataProcessed = true;
+      await decryptStream.listen(
+        (data) async {
+          if (!metadataProcessed) {
+            buffer.write(String.fromCharCodes(data));
+            if (buffer.toString().contains('\n')) {
+              metadataProcessed = true;
 
-            final metadataJson = buffer.toString().split('\n').first;
-            logger.d('Received metadata: $metadataJson');
+              final metadataJson = buffer.toString().split('\n').first;
+              logger.d('Received metadata: $metadataJson');
 
-            final Map<String, dynamic> metadata = jsonDecode(metadataJson);
-            fileName = metadata['fileName'];
-            fileSize = metadata['fileSize'];
-            isEncrypted = metadata['isEncrypted'];
-            iv = encrypt.IV.fromBase64(metadata['iv']); // Extract IV from metadata
+              final Map<String, dynamic> metadata = jsonDecode(metadataJson);
+              fileName = metadata['fileName'];
+              fileSize = metadata['fileSize'];
+              isEncrypted = metadata['isEncrypted'];
+              iv = encrypt.IV.fromBase64(metadata['iv']); // Extract IV from metadata
 
-            if (fileName == null || fileSize == null || fileSize is! int) {
-              logger.e('Invalid metadata format: $metadataJson');
-              await client.close();
-              return;
+              if (fileName == null || fileSize == null || fileSize is! int) {
+                logger.e('Invalid metadata format: $metadataJson');
+                await client.close();
+                return;
+              }
+
+              String filePath = path.join(savePath, fileName);
+              fileSink = File(filePath).openWrite();
+
+              buffer.clear();
             }
-
-            String filePath = path.join(savePath, fileName);
-            fileSink = File(filePath).openWrite();
-
-            buffer.clear();
           }
-        }
 
-        if (metadataProcessed && fileSink != null) {
-          fileSink!.add(data);
+          if (metadataProcessed && fileSink != null) {
+            fileSink!.add(data);
 
-          bytesRead += data.length;
-          if (bytesRead >= fileSize!) {
+            bytesRead += data.length;
+            if (bytesRead >= fileSize!) {
+              await fileSink!.close();
+              logger.i('File received: ${path.join(savePath, fileName!)}');
+              await client.close();
+            }
+          }
+        },
+        onError: (error) async {
+          logger.e('Error receiving file data: $error');
+          if (fileSink != null) {
             await fileSink!.close();
-            logger.i('File received: ${path.join(savePath, fileName!)}');
-            await client.close();
+            await File(path.join(savePath, fileName!)).delete();
           }
-        }
-      },
-      onError: (error) async {
-        logger.e('Error receiving file data: $error');
-        if (fileSink != null) {
-          await fileSink!.close();
-          await File(path.join(savePath, fileName!)).delete();
-        }
-        await client.close();
-      },
-      onDone: () async {
-        if (fileSink != null) {
-          await fileSink!.close();
-          if (bytesRead < fileSize!) {
-            logger.w('File transfer incomplete. Expected $fileSize bytes, but received $bytesRead bytes.');
+          await client.close();
+        },
+        onDone: () async {
+          if (fileSink != null) {
+            await fileSink!.close();
+            if (bytesRead < fileSize!) {
+              logger.w('File transfer incomplete. Expected $fileSize bytes, but received $bytesRead bytes.');
+            }
           }
-        }
-        await client.close();
-      },
-      cancelOnError: true,
-    ).asFuture();
-  } catch (e) {
-    logger.e('Error processing client connection: $e');
-    await client.close();
+          await client.close();
+        },
+        cancelOnError: true,
+      ).asFuture();
+    } catch (e) {
+      logger.e('Error processing client connection: $e');
+      await client.close();
+    }
   }
-}
-
-
-
-
 
   void stopReceiving() {
     _serverSocket?.close();
