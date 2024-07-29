@@ -1,29 +1,51 @@
-import 'package:encrypt/encrypt.dart' as encrypt;
+import 'dart:convert';
 import 'dart:typed_data';
+import 'package:encrypt/encrypt.dart';
+import 'package:crypto/crypto.dart'; // Add this import for SHA hashing
 
 class EncryptionHelper {
-  final encrypt.Encrypter _encrypter;
-  final encrypt.IV _iv;
+  final Key key;
+  final Encrypter encrypter;
 
-  EncryptionHelper(encrypt.Encrypter encrypter, encrypt.IV iv)
-      : _encrypter = encrypter,
-        _iv = iv;
+  EncryptionHelper(String keyString, int ivLength)
+      : key = Key.fromUtf8(keyString.padRight(32, '0').substring(0, 32)),
+        encrypter = Encrypter(AES(Key.fromUtf8(keyString.padRight(32, '0').substring(0, 32)))) {}
 
-  Uint8List encryptData(Uint8List data) {
-    final encrypted = _encrypter.encryptBytes(data, iv: _iv);
-    print('Encrypted data: ${encrypted.bytes}');
-    return encrypted.bytes;
+  Encrypted encryptData(Uint8List data) {
+    // Generate SHA-256 hash of the data
+    final hash = sha256.convert(data).bytes;
+
+    // Combine hash and data
+    final combinedData = Uint8List.fromList(hash + data);
+
+    final base64Data = base64Encode(combinedData);
+    final iv = IV.fromLength(16);  // Ensure IV is always 16 bytes long
+    return encrypter.encrypt(base64Data, iv: iv);
   }
 
-  Uint8List decryptData(Uint8List encryptedData) {
-    try {
-      final encrypted = encrypt.Encrypted(encryptedData);
-      final decrypted = _encrypter.decryptBytes(encrypted, iv: _iv);
-      print('Decrypted data: $decrypted');
-      return decrypted;
-    } catch (e) {
-      print('Decryption error: $e');
-      throw Exception('Decryption error: $e');
+  Uint8List decryptData(Encrypted encryptedData) {
+    final iv = IV.fromLength(16);  // Ensure IV is the same as used for encryption
+    final decryptedBase64 = encrypter.decrypt(encryptedData, iv: iv);
+    final decryptedData = base64Decode(decryptedBase64);
+
+    // Split hash and data
+    final hash = decryptedData.sublist(0, 32); // SHA-256 hash is 32 bytes long
+    final originalData = decryptedData.sublist(32);
+
+    // Verify the hash
+    final calculatedHash = sha256.convert(originalData).bytes;
+    if (!listEquals(hash, calculatedHash)) {
+      throw Exception('Data integrity check failed');
     }
+
+    return originalData;
+  }
+
+  bool listEquals(List<int> list1, List<int> list2) {
+    if (list1.length != list2.length) return false;
+    for (int i = 0; i < list1.length; i++) {
+      if (list1[i] != list2[i]) return false;
+    }
+    return true;
   }
 }
