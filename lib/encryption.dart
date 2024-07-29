@@ -9,7 +9,7 @@ class EncryptionHelper {
 
   EncryptionHelper(String keyString, int ivLength)
       : key = Key.fromUtf8(keyString.padRight(32, '0').substring(0, 32)),
-        encrypter = Encrypter(AES(Key.fromUtf8(keyString.padRight(32, '0').substring(0, 32)))) {}
+        encrypter = Encrypter(AES(Key.fromUtf8(keyString.padRight(32, '0').substring(0, 32))));
 
   Encrypted encryptData(Uint8List data) {
     // Generate SHA-256 hash of the data

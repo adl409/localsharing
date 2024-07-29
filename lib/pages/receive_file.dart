@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter/scheduler.dart';
 
 class ReceiveFilePage extends StatefulWidget {
+  const ReceiveFilePage({super.key});
+
   @override
   _ReceiveFilePageState createState() => _ReceiveFilePageState();
 }
@@ -60,7 +62,7 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No directory selected')),
+        const SnackBar(content: Text('No directory selected')),
       );
     }
   }
