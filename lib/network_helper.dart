@@ -25,8 +25,11 @@ class NetworkHelper {
 
   String? _saveDirectory; // Variable to store selected save directory
 
+  // Generate a new AES key and IV
   final encrypt.Key _key = encrypt.Key.fromLength(32); // 256-bit key for AES
   final encrypt.IV _iv = encrypt.IV.fromLength(16); // 128-bit IV for AES
+
+  // Initialize or securely load your key and IV as needed
 
   Future<void> startMulticasting() async {
     try {
@@ -129,9 +132,7 @@ Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}
 
     final fileName = path.basename(file.path);
     final fileSize = await file.length();
-
-
-    // Serialize metadata to JSON
+    
     final metadata = jsonEncode({'fileName': fileName, 'fileSize': fileSize, 'isEncrypted': encryptData});
     socket.write('$metadata\n');
     await socket.flush();
@@ -139,37 +140,29 @@ Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}
     final fileStream = file.openRead();
     final encrypter = encrypt.Encrypter(encrypt.AES(_key));
 
-    Stream<List<int>> encryptStream;
+    Stream<List<int>> streamToSend;
     if (encryptData) {
-      // Transform the fileStream to an encrypted stream
-      encryptStream = fileStream.transform(StreamTransformer<List<int>, Uint8List>.fromHandlers(
+      streamToSend = fileStream.transform(StreamTransformer.fromHandlers(
         handleData: (data, sink) {
           final encrypted = encrypter.encryptBytes(Uint8List.fromList(data), iv: _iv);
           sink.add(encrypted.bytes);
         },
         handleDone: (sink) {
           sink.close();
-          logger.i('Encryption completed.');
         }
       ));
-      logger.i('Encrypting the file...');
     } else {
-      encryptStream = fileStream;
+      streamToSend = fileStream;
     }
 
-    // Handle sending the encrypted or plain data
-    await encryptStream.listen(
+    await streamToSend.listen(
       (data) {
         socket.add(data);
       },
       onDone: () async {
         await socket.flush();
         await socket.close();
-        if (encryptData) {
-          logger.i('File encrypted and sent successfully.');
-        } else {
-          logger.i('File sent successfully without encryption.');
-        }
+        logger.i('File sent successfully.');
       },
       onError: (e) {
         logger.e('Error sending file data: $e');
@@ -181,11 +174,6 @@ Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}
     throw e;
   }
 }
-
-
-
-
-
 
 
   ServerSocket? _serverSocket;
@@ -238,18 +226,20 @@ Future<void> handleClientConnection(Socket client, String savePath) async {
     final encrypter = encrypt.Encrypter(encrypt.AES(_key));
     final decryptStream = client.transform<Uint8List>(StreamTransformer.fromHandlers(
       handleData: (data, sink) {
-        // Decrypt data if necessary
-        if (isEncrypted == true) { // Replace `isEncrypted` with your own condition to check if the data is encrypted
-          final encrypted = encrypt.Encrypted(Uint8List.fromList(data));
-          final decrypted = encrypter.decryptBytes(encrypted, iv: _iv);
-          sink.add(Uint8List.fromList(decrypted));
-        } else {
-          sink.add(data);
+        try {
+          if (isEncrypted == true) {
+            final encrypted = encrypt.Encrypted(Uint8List.fromList(data));
+            final decrypted = encrypter.decryptBytes(encrypted, iv: _iv);
+            sink.add(Uint8List.fromList(decrypted));
+          } else {
+            sink.add(data);
+          }
+        } catch (e) {
+          logger.e('Decryption error: $e');
         }
       },
       handleDone: (sink) {
         sink.close();
-        logger.i('Decryption completed.');
       }
     ));
 
@@ -266,6 +256,7 @@ Future<void> handleClientConnection(Socket client, String savePath) async {
             final Map<String, dynamic> metadata = jsonDecode(metadataJson);
             fileName = metadata['fileName'];
             fileSize = metadata['fileSize'];
+            isEncrypted = metadata['isEncrypted'];
 
             if (fileName == null || fileSize == null || fileSize is! int) {
               logger.e('Invalid metadata format: $metadataJson');
@@ -273,11 +264,8 @@ Future<void> handleClientConnection(Socket client, String savePath) async {
               return;
             }
 
-            // Initialize file sink
             String filePath = path.join(savePath, fileName);
             fileSink = File(filePath).openWrite();
-
-            // Remove metadata part from buffer
             buffer.clear();
           }
         }
@@ -297,7 +285,7 @@ Future<void> handleClientConnection(Socket client, String savePath) async {
         logger.e('Error receiving file data: $error');
         if (fileSink != null) {
           await fileSink!.close();
-          await File(path.join(savePath, fileName!)).delete(); // Clean up the partially written file
+          await File(path.join(savePath, fileName!)).delete();
         }
         await client.close();
       },
@@ -317,8 +305,6 @@ Future<void> handleClientConnection(Socket client, String savePath) async {
     await client.close();
   }
 }
-
-
 
 
 
