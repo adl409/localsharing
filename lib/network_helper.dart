@@ -233,13 +233,19 @@ Future<void> handleClientConnection(Socket client, String savePath) async {
     bool? isEncrypted;
     encrypt.IV? iv;
 
-    final encrypter = encrypt.Encrypter(encrypt.AES(_key));
+    final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
+    
     final decryptStream = client.transform<Uint8List>(StreamTransformer.fromHandlers(
       handleData: (data, sink) {
         if (isEncrypted == true) {
-          final encrypted = encrypt.Encrypted(Uint8List.fromList(data));
-          final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
-          sink.add(Uint8List.fromList(decrypted));
+          try {
+            final encrypted = encrypt.Encrypted(Uint8List.fromList(data));
+            final decrypted = encrypter.decryptBytes(encrypted, iv: iv!);
+            sink.add(Uint8List.fromList(decrypted));
+          } catch (e) {
+            logger.e('Decryption error: $e');
+            sink.addError(e);
+          }
         } else {
           sink.add(data);
         }
@@ -264,7 +270,7 @@ Future<void> handleClientConnection(Socket client, String savePath) async {
             fileName = metadata['fileName'];
             fileSize = metadata['fileSize'];
             isEncrypted = metadata['isEncrypted'];
-            iv = encrypt.IV.fromBase64(metadata['iv']); // Extract IV from metadata
+            iv = metadata['iv'] != null ? encrypt.IV.fromBase64(metadata['iv']) : null;
 
             if (fileName == null || fileSize == null || fileSize is! int) {
               logger.e('Invalid metadata format: $metadataJson');
@@ -277,12 +283,10 @@ Future<void> handleClientConnection(Socket client, String savePath) async {
 
             buffer.clear();
           }
-        }
-
-        if (metadataProcessed && fileSink != null) {
+        } else if (fileSink != null) {
           fileSink!.add(data);
-
           bytesRead += data.length;
+
           if (bytesRead >= fileSize!) {
             await fileSink!.close();
             logger.i('File received: ${path.join(savePath, fileName!)}');
