@@ -13,14 +13,14 @@ class EncryptionHelper {
 
   // Encrypt data
   Uint8List encryptData(Uint8List data) {
-    final encrypter = encrypt.Encrypter(encrypt.AES(_key));
+    final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
     final encrypted = encrypter.encryptBytes(data, iv: _iv);
     return encrypted.bytes;
   }
 
   // Decrypt data
   Uint8List decryptData(Uint8List encryptedData) {
-    final encrypter = encrypt.Encrypter(encrypt.AES(_key));
+    final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
     final decrypted = encrypter.decryptBytes(
       encrypt.Encrypted(encryptedData),
       iv: _iv,
