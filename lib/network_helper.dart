@@ -29,8 +29,6 @@ class NetworkHelper {
   final encrypt.Key _key = encrypt.Key.fromLength(32); // 256-bit key for AES
   final encrypt.IV _iv = encrypt.IV.fromLength(16); // 128-bit IV for AES
 
-  // Initialize or securely load your key and IV as needed
-
   Future<void> startMulticasting() async {
     try {
       String? wifiIP = await _networkInfo.getWifiIP();
@@ -231,7 +229,7 @@ class NetworkHelper {
       encrypt.IV? iv;
 
       final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
-      
+
       await client.listen(
         (data) async {
           if (!metadataProcessed) {
@@ -267,8 +265,6 @@ class NetworkHelper {
                 fileSink!.add(decrypted);
               } catch (e) {
                 logger.e('Decryption error: $e');
-                await fileSink!.close();
-                await File(path.join(savePath, fileName)).delete();
                 await client.close();
                 return;
               }
