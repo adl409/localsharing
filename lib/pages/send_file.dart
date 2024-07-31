@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
@@ -59,9 +57,8 @@ class _SendFilePageState extends State<SendFilePage> {
           final fileBytes = await selectedFile!.readAsBytes();
           final encrypter = encrypt.Encrypter(encrypt.AES(_key));
           final encryptedBytes = encrypter.encryptBytes(fileBytes, iv: _iv).bytes;
-          final combinedBytes = Uint8List.fromList(_iv.bytes + encryptedBytes); // Combine IV and encrypted data
           final tempFile = File('${selectedFile!.path}.enc');
-          await tempFile.writeAsBytes(combinedBytes);
+          await tempFile.writeAsBytes(encryptedBytes);
 
           await networkHelper.sendFile(tempFile, selectedDevice!);
           ScaffoldMessenger.of(context).showSnackBar(

@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
-import 'package:crypto/crypto.dart';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:path/path.dart' as path;
@@ -20,7 +18,7 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
   String? ipAddress;
   String? saveDirectory;
   static const int port = 5555; // Same port as in NetworkHelper
-  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256'); // Use a secure key in production
+  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256');
 
   @override
   void initState() {
@@ -61,16 +59,7 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
       setState(() {
         saveDirectory = directoryPath;
       });
-      networkHelper.startReceiving((data, sender) async {
-        // Save received file
-        String filePath = '$saveDirectory/${DateTime.now().millisecondsSinceEpoch}.enc';
-        File receivedFile = File(filePath);
-        await receivedFile.writeAsBytes(data);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Received file saved to: $filePath')),
-        );
-      }); // Save path is picked within startReceiving()
+      networkHelper.startReceiving(); // Save path is picked within startReceiving()
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Saving files to $saveDirectory')),
       );
@@ -89,24 +78,22 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
       final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
 
       try {
-        // Read encrypted file
+        // Read the encrypted file
         Uint8List encryptedBytes = await file.readAsBytes();
         
-        // Extract IV from the encrypted file
-        final ivBytes = encryptedBytes.sublist(0, 16); // The first 16 bytes are the IV
-        final encryptedData = encryptedBytes.sublist(16); // The rest is the actual encrypted data
+        // Extract the IV from the first 16 bytes
+        final iv = encrypt.IV(encryptedBytes.sublist(0, 16));
+        final encryptedData = encryptedBytes.sublist(16);
 
-        final iv = encrypt.IV(ivBytes);
-
-        // Decrypt file
+        // Decrypt the file
         List<int> decryptedBytes = encrypter.decryptBytes(encrypt.Encrypted(encryptedData), iv: iv);
 
-        // Save decrypted file
+        // Save the decrypted file
         String newPath = '${path.dirname(file.path)}/decrypted_${path.basename(file.path)}';
         File decryptedFile = File(newPath);
         await decryptedFile.writeAsBytes(decryptedBytes);
 
-        // Notify user
+        // Notify the user
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('File decrypted and saved to: $newPath')),
         );
