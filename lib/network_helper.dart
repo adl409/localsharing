@@ -28,8 +28,8 @@ class NetworkHelper {
   String? _saveDirectory; // Variable to store selected save directory
 
   // Hardcoded AES key and IV
-  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256'); // Use a secure key in production
-  final encrypt.IV _iv = encrypt.IV.fromUtf8('16-character-iv-123');
+  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256'); // 256-bit key for AES
+  final encrypt.IV _iv = encrypt.IV.fromLength(16); // 128-bit IV for AES
 
   Future<void> startMulticasting() async {
     try {
@@ -215,7 +215,7 @@ class NetworkHelper {
     return _saveDirectory;
   }
 
-  Future<void> startReceiving([Future<Null> Function(dynamic data, dynamic sender)? param0]) async {
+  Future<void> startReceiving() async {
     String? savePath = await pickSaveDirectory();
     if (savePath == null) {
       logger.w('No directory selected for saving received files');

@@ -16,13 +16,13 @@ class _SendFilePageState extends State<SendFilePage> {
   String? fileName; // To store the selected file name
   File? selectedFile; // To store the selected file
   String? selectedDevice; // To store the selected device
-  bool isEncrypted = true; // To keep track of encryption option
+  bool isEncrypted = false; // To keep track of encryption option
 
   NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
 
   // Add your encryption key here
-  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256'); // Use a secure key in production
-  final encrypt.IV _iv = encrypt.IV.fromLength(16);
+  final encrypt.Key _key = encrypt.Key.fromLength(32); // Use a secure key in production
+  final encrypt.IV _iv = encrypt.IV.fromLength(16); // Initialization vector
 
   @override
   void initState() {
