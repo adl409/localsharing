@@ -5,7 +5,6 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:path/path.dart' as path;
 import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
-import 'dart:convert';
 
 class ReceiveFilePage extends StatefulWidget {
   const ReceiveFilePage({super.key});
@@ -15,24 +14,23 @@ class ReceiveFilePage extends StatefulWidget {
 }
 
 class _ReceiveFilePageState extends State<ReceiveFilePage> {
-  NetworkHelper networkHelper = NetworkHelper();
+  NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
   String? ipAddress;
   String? saveDirectory;
-  static const int port = 5555;
+  static const int port = 5555; // Same port as in NetworkHelper
   final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256');
-  final encrypt.IV _iv = encrypt.IV.fromLength(16);
 
   @override
   void initState() {
     super.initState();
     _getIpAddress();
-    networkHelper.startMulticasting();
+    networkHelper.startMulticasting(); // Start multicasting when page initializes
   }
 
   @override
   void dispose() {
     networkHelper.stopReceiving();
-    networkHelper.stopMulticasting();
+    networkHelper.stopMulticasting(); // Stop multicasting when page is disposed
     super.dispose();
   }
 
@@ -80,23 +78,18 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
 
       try {
         Uint8List encryptedBytes = await file.readAsBytes();
+        
+        // Extract the IV from the first 16 bytes
         final iv = encrypt.IV(encryptedBytes.sublist(0, 16));
         final encryptedData = encryptedBytes.sublist(16);
 
+        // Decrypt the file
         List<int> decryptedBytes = encrypter.decryptBytes(encrypt.Encrypted(encryptedData), iv: iv);
 
-        // Extract metadata (Example: metadata was in the first 100 bytes)
-        final metadataLength = 100; // Adjust as needed
-        final metadataJson = utf8.decode(decryptedBytes.sublist(0, metadataLength));
-        final metadata = json.decode(metadataJson) as Map<String, dynamic>;
-
-        final fileName = metadata['fileName'] as String;
-        final fileExtension = metadata['fileExtension'] as String;
-
         // Save the decrypted file
-        String newPath = '$saveDirectory/$fileName$fileExtension';
+        String newPath = '${path.dirname(file.path)}/decrypted_${path.basename(file.path)}';
         File decryptedFile = File(newPath);
-        await decryptedFile.writeAsBytes(decryptedBytes.sublist(metadataLength));
+        await decryptedFile.writeAsBytes(decryptedBytes);
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('File decrypted and saved to: $newPath')),
