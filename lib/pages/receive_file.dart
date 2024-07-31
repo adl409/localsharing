@@ -71,12 +71,14 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
   }
 
   Future<void> _decryptFile() async {
+    // Open file picker to select an encrypted file
     FilePickerResult? result = await FilePicker.platform.pickFiles();
     if (result != null) {
       File file = File(result.files.single.path!);
       final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
 
       try {
+        // Read the encrypted file
         Uint8List encryptedBytes = await file.readAsBytes();
         
         // Extract the IV from the first 16 bytes
@@ -91,6 +93,7 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
         File decryptedFile = File(newPath);
         await decryptedFile.writeAsBytes(decryptedBytes);
 
+        // Notify the user
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('File decrypted and saved to: $newPath')),
         );
