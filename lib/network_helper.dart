@@ -168,9 +168,14 @@ class NetworkHelper {
             final encrypted = encrypter.encryptBytes(Uint8List.fromList(data), iv: _iv);
             sink.add(encrypted.bytes);
           },
-          handleDone: (sink) {
+          handleDone: (sink) async {
             sink.close();
             logger.i('Encryption completed.');
+
+            // Save encrypted file
+            final encryptedFile = File(file.path + '.enc');
+            await encryptedFile.writeAsBytes(fileBytes);
+            logger.i('Encrypted file saved at ${encryptedFile.path}');
           }
         ));
         logger.i('Encrypting the file...');
@@ -249,6 +254,9 @@ class NetworkHelper {
 
       final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
 
+      final encryptedFilePath = path.join(savePath, 'received_${DateTime.now().millisecondsSinceEpoch}.enc');
+      final decryptedFilePath = path.join(savePath, 'received_${DateTime.now().millisecondsSinceEpoch}.dec');
+
       await client.listen(
         (data) async {
           if (!metadataProcessed) {
@@ -266,7 +274,7 @@ class NetworkHelper {
               iv = encrypt.IV.fromBase64(metadata['iv']);
               expectedHash = metadata['hash'];
 
-              final file = File(path.join(savePath, fileName!));
+              final file = File(encryptedFilePath);
               fileSink = file.openWrite();
               buffer.clear();
             }
@@ -274,10 +282,10 @@ class NetworkHelper {
             final fileData = data as Uint8List;
 
             if (isEncrypted!) {
+              fileSink!.add(fileData);
+            } else {
               final decryptedData = encrypter.decryptBytes(encrypt.Encrypted(fileData), iv: iv!);
               fileSink!.add(decryptedData);
-            } else {
-              fileSink!.add(fileData);
             }
 
             bytesRead += fileData.length;
@@ -285,7 +293,17 @@ class NetworkHelper {
               await fileSink!.flush();
               await fileSink!.close();
               logger.i('File received and saved successfully.');
-              final receivedFile = File(path.join(savePath, fileName!));
+
+              if (isEncrypted!) {
+                // Save decrypted file
+                final decryptedFile = File(decryptedFilePath);
+                final encryptedFileBytes = await File(encryptedFilePath).readAsBytes();
+                final decryptedData = encrypter.decryptBytes(encrypt.Encrypted(encryptedFileBytes), iv: iv!);
+                await decryptedFile.writeAsBytes(decryptedData);
+                logger.i('Decrypted file saved at ${decryptedFile.path}');
+              }
+
+              final receivedFile = File(encryptedFilePath);
               final fileBytes = await receivedFile.readAsBytes();
               final receivedHash = generateHash(fileBytes);
               if (verifyDataIntegrity(fileBytes, expectedHash!)) {
