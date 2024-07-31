@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
 
 class SendFilePage extends StatefulWidget {
+  const SendFilePage({super.key});
+
   @override
   _SendFilePageState createState() => _SendFilePageState();
 }
@@ -55,7 +57,7 @@ void sendFile() async {
     }
   } else {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('File or device not selected')),
+      const SnackBar(content: Text('File or device not selected')),
     );
   }
 }
@@ -157,7 +159,7 @@ void sendFile() async {
                                 },
                               );
                             } else {
-                              return Center(child: CircularProgressIndicator());
+                              return const Center(child: CircularProgressIndicator());
                             }
                           },
                         ),

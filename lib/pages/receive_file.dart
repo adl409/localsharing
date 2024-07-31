@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
-import 'package:flutter/scheduler.dart';
 
 class ReceiveFilePage extends StatefulWidget {
+  const ReceiveFilePage({super.key});
+
   @override
   _ReceiveFilePageState createState() => _ReceiveFilePageState();
 }
@@ -60,7 +61,7 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No directory selected')),
+        const SnackBar(content: Text('No directory selected')),
       );
     }
   }

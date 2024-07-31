@@ -1,25 +1,44 @@
 import 'dart:convert';
-import 'package:encrypt/encrypt.dart';
+  
 import 'dart:typed_data';
+import 'package:encrypt/encrypt.dart' as encrypt;
+import 'package:crypto/crypto.dart'; // Add `crypto` package dependency in `pubspec.yaml`
 
 class EncryptionHelper {
-  final Key key;
-  final Encrypter encrypter;
-  
+  final encrypt.Key _key;
+  final encrypt.IV _iv;
 
-  EncryptionHelper(String keyString, int ivLength)
-      : key = Key.fromUtf8(keyString.padRight(32, '0').substring(0, 32)),
-        encrypter = Encrypter(AES(Key.fromUtf8(keyString.padRight(32, '0').substring(0, 32)))) {}
+  EncryptionHelper(String keyString, String ivString)
+      : _key = encrypt.Key.fromUtf8(keyString),
+        _iv = encrypt.IV.fromBase64(ivString);
 
-  Encrypted encryptData(Uint8List data) {
-    final base64Data = base64Encode(data);
-    final iv = IV.fromLength(16);  // Ensure IV is always 16 bytes long
-    return encrypter.encrypt(base64Data, iv: iv);
+
+  // Encrypt data
+  Uint8List encryptData(Uint8List data) {
+    final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
+    final encrypted = encrypter.encryptBytes(data, iv: _iv);
+    return encrypted.bytes;
   }
 
-  Uint8List decryptData(Encrypted encryptedData) {
-    final iv = IV.fromLength(16);  // Ensure IV is the same as used for encryption
-    final decryptedBase64 = encrypter.decrypt(encryptedData, iv: iv);
-    return base64Decode(decryptedBase64);
+  // Decrypt data
+  Uint8List decryptData(Uint8List encryptedData) {
+    final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
+    final decrypted = encrypter.decryptBytes(
+      encrypt.Encrypted(encryptedData),
+      iv: _iv,
+    );
+    return Uint8List.fromList(decrypted); // Convert List<int> to Uint8List
+  }
+
+  // Generate SHA-256 hash
+  String generateHash(Uint8List data) {
+    final digest = sha256.convert(data);
+    return digest.toString();
+  }
+
+  // Verify data integrity by comparing hashes
+  bool verifyDataIntegrity(Uint8List data, String expectedHash) {
+    final actualHash = generateHash(data);
+    return actualHash == expectedHash;
   }
 }
