@@ -215,7 +215,7 @@ class NetworkHelper {
     return _saveDirectory;
   }
 
-  Future<void> startReceiving() async {
+  Future<void> startReceiving([Future<Null> Function(dynamic data, dynamic sender)? param0]) async {
     String? savePath = await pickSaveDirectory();
     if (savePath == null) {
       logger.w('No directory selected for saving received files');

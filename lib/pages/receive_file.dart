@@ -61,7 +61,16 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
       setState(() {
         saveDirectory = directoryPath;
       });
-      networkHelper.startReceiving(); // Save path is picked within startReceiving()
+      networkHelper.startReceiving((data, sender) async {
+        // Save received file
+        String filePath = '$saveDirectory/${DateTime.now().millisecondsSinceEpoch}.enc';
+        File receivedFile = File(filePath);
+        await receivedFile.writeAsBytes(data);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Received file saved to: $filePath')),
+        );
+      }); // Save path is picked within startReceiving()
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Saving files to $saveDirectory')),
       );
