@@ -27,7 +27,7 @@ class NetworkHelper {
 
   // Hardcoded AES key (32 bytes for a 256-bit key)
   final encrypt.Key _key = encrypt.Key.fromUtf8('ThisIsASecretKeyThatIKnowOfLmaoo');
-  final encrypt.IV _iv = encrypt.IV.fromLength(16); // 128-bit IV for AES
+  final encrypt.IV _iv = encrypt.IV.fromSecureRandom(16); // 128-bit IV for AES
 
   Future<void> startMulticasting() async {
     try {
@@ -123,7 +123,7 @@ class NetworkHelper {
     }
   }
 
-  Future<void> sendFile(File file, String deviceAddress, {bool encryptData = false}) async {
+  Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}) async {
     try {
       final socket = await Socket.connect(deviceAddress, port);
       logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
