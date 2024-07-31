@@ -20,8 +20,7 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
   String? ipAddress;
   String? saveDirectory;
   static const int port = 5555; // Same port as in NetworkHelper
-  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-super-secret-key!!');
-  final encrypt.IV _iv = encrypt.IV.fromLength(16);
+  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256'); // Use a secure key in production
 
   @override
   void initState() {
@@ -83,8 +82,15 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
       try {
         // Read encrypted file
         Uint8List encryptedBytes = await file.readAsBytes();
+        
+        // Extract IV from the encrypted file
+        final ivBytes = encryptedBytes.sublist(0, 16); // The first 16 bytes are the IV
+        final encryptedData = encryptedBytes.sublist(16); // The rest is the actual encrypted data
+
+        final iv = encrypt.IV(ivBytes);
+
         // Decrypt file
-        List<int> decryptedBytes = encrypter.decryptBytes(encrypt.Encrypted(encryptedBytes), iv: _iv);
+        List<int> decryptedBytes = encrypter.decryptBytes(encrypt.Encrypted(encryptedData), iv: iv);
 
         // Save decrypted file
         String newPath = '${path.dirname(file.path)}/decrypted_${path.basename(file.path)}';

@@ -28,8 +28,8 @@ class NetworkHelper {
   String? _saveDirectory; // Variable to store selected save directory
 
   // Hardcoded AES key and IV
-  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-super-secret-key!!'); // 256-bit key for AES
-  final encrypt.IV _iv = encrypt.IV.fromLength(16); // 128-bit IV for AES
+  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256'); // Use a secure key in production
+  final encrypt.IV _iv = encrypt.IV.fromUtf8('16-character-iv-123');
 
   Future<void> startMulticasting() async {
     try {
@@ -137,7 +137,7 @@ class NetworkHelper {
     return actualHash == expectedHash;
   }
 
-  Future<void> sendFile(File file, String deviceAddress, {bool encryptData = false}) async {
+  Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}) async {
     try {
       final socket = await Socket.connect(deviceAddress, port);
       logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');

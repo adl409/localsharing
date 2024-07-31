@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
 import 'package:encrypt/encrypt.dart' as encrypt; // Add the encrypt package for AES encryption
 
@@ -16,13 +17,12 @@ class _SendFilePageState extends State<SendFilePage> {
   String? fileName; // To store the selected file name
   File? selectedFile; // To store the selected file
   String? selectedDevice; // To store the selected device
-  bool isEncrypted = false; // To keep track of encryption option
+  bool isEncrypted = true; // To keep track of encryption option
 
   NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
 
   // Add your encryption key here
-  final encrypt.Key _key = encrypt.Key.fromLength(32); // Use a secure key in production
-  final encrypt.IV _iv = encrypt.IV.fromLength(16); // Initialization vector
+  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256'); // Use a secure key in production
 
   @override
   void initState() {
@@ -55,12 +55,24 @@ class _SendFilePageState extends State<SendFilePage> {
         if (isEncrypted) {
           // Encrypt the file before sending
           final fileBytes = await selectedFile!.readAsBytes();
+          final iv = encrypt.IV.fromSecureRandom(16); // Securely generate a random IV
           final encrypter = encrypt.Encrypter(encrypt.AES(_key));
-          final encryptedBytes = encrypter.encryptBytes(fileBytes, iv: _iv).bytes;
+          final encryptedBytes = encrypter.encryptBytes(fileBytes, iv: iv).bytes;
+
+          // Combine IV and encrypted data
+          final combinedBytes = Uint8List(iv.bytes.length + encryptedBytes.length);
+          combinedBytes.setAll(0, iv.bytes);
+          combinedBytes.setAll(iv.bytes.length, encryptedBytes);
+
+          // Create a temporary file to send
           final tempFile = File('${selectedFile!.path}.enc');
-          await tempFile.writeAsBytes(encryptedBytes);
+          await tempFile.writeAsBytes(combinedBytes);
 
           await networkHelper.sendFile(tempFile, selectedDevice!);
+
+          // Delete the temporary file after sending
+          await tempFile.delete();
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Encrypted file sent: $fileName to $selectedDevice')),
           );
