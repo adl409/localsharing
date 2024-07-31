@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io';
 import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
+import 'package:encrypt/encrypt.dart' as encrypt; // Add the encrypt package for AES encryption
 
 class SendFilePage extends StatefulWidget {
   const SendFilePage({super.key});
@@ -15,8 +16,13 @@ class _SendFilePageState extends State<SendFilePage> {
   String? fileName; // To store the selected file name
   File? selectedFile; // To store the selected file
   String? selectedDevice; // To store the selected device
+  bool isEncrypted = false; // To keep track of encryption option
 
   NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
+
+  // Add your encryption key here
+  final encrypt.Key _key = encrypt.Key.fromLength(32); // Use a secure key in production
+  final encrypt.IV _iv = encrypt.IV.fromLength(16); // Initialization vector
 
   @override
   void initState() {
@@ -43,25 +49,38 @@ class _SendFilePageState extends State<SendFilePage> {
     }
   }
 
-void sendFile() async {
-  if (selectedFile != null && selectedDevice != null) {
-    try {
-      await networkHelper.sendFile(selectedFile!, selectedDevice!);
+  Future<void> sendFile() async {
+    if (selectedFile != null && selectedDevice != null) {
+      try {
+        if (isEncrypted) {
+          // Encrypt the file before sending
+          final fileBytes = await selectedFile!.readAsBytes();
+          final encrypter = encrypt.Encrypter(encrypt.AES(_key));
+          final encryptedBytes = encrypter.encryptBytes(fileBytes, iv: _iv).bytes;
+          final tempFile = File('${selectedFile!.path}.enc');
+          await tempFile.writeAsBytes(encryptedBytes);
+
+          await networkHelper.sendFile(tempFile, selectedDevice!);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Encrypted file sent: $fileName to $selectedDevice')),
+          );
+        } else {
+          await networkHelper.sendFile(selectedFile!, selectedDevice!);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('File sent: $fileName to $selectedDevice')),
+          );
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send file: $e')),
+        );
+      }
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('File sent: $fileName to $selectedDevice')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send file: $e')),
+        const SnackBar(content: Text('File or device not selected')),
       );
     }
-  } else {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('File or device not selected')),
-    );
   }
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -95,6 +114,21 @@ void sendFile() async {
                 'Selected file: $fileName',
                 style: const TextStyle(fontSize: 16),
               ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('Encrypt file'),
+                Switch(
+                  value: isEncrypted,
+                  onChanged: (value) {
+                    setState(() {
+                      isEncrypted = value;
+                    });
+                  },
+                ),
+              ],
+            ),
             const SizedBox(height: 20),
             ElevatedButton.icon(
               icon: const Icon(Icons.send),

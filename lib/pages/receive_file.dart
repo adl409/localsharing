@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
 import 'package:file_picker/file_picker.dart';
+import 'package:encrypt/encrypt.dart' as encrypt;
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:path/path.dart' as path;
+import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
 
 class ReceiveFilePage extends StatefulWidget {
   const ReceiveFilePage({super.key});
@@ -15,6 +20,8 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
   String? ipAddress;
   String? saveDirectory;
   static const int port = 5555; // Same port as in NetworkHelper
+  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-super-secret-key!!');
+  final encrypt.IV _iv = encrypt.IV.fromLength(16);
 
   @override
   void initState() {
@@ -62,6 +69,40 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No directory selected')),
+      );
+    }
+  }
+
+  Future<void> _decryptFile() async {
+    // Open file picker to select an encrypted file
+    FilePickerResult? result = await FilePicker.platform.pickFiles();
+    if (result != null) {
+      File file = File(result.files.single.path!);
+      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
+
+      try {
+        // Read encrypted file
+        Uint8List encryptedBytes = await file.readAsBytes();
+        // Decrypt file
+        List<int> decryptedBytes = encrypter.decryptBytes(encrypt.Encrypted(encryptedBytes), iv: _iv);
+
+        // Save decrypted file
+        String newPath = '${path.dirname(file.path)}/decrypted_${path.basename(file.path)}';
+        File decryptedFile = File(newPath);
+        await decryptedFile.writeAsBytes(decryptedBytes);
+
+        // Notify user
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('File decrypted and saved to: $newPath')),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error decrypting file: $e')),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No file selected.')),
       );
     }
   }
@@ -118,6 +159,21 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
                 const SizedBox(height: 20),
                 const CircularProgressIndicator(),
               ],
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _decryptFile,
+                style: ElevatedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.blue,
+                  minimumSize: const Size(double.infinity, 50),
+                  textStyle: const TextStyle(fontSize: 18),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                ),
+                child: const Text('Decrypt File'),
+              ),
             ],
           ),
         ),

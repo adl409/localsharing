@@ -18,6 +18,7 @@ class NetworkHelper {
 
   final _devicesController = StreamController<List<String>>.broadcast();
   Stream<List<String>> get devicesStream => _devicesController.stream;
+  Function(File)? onFileReceived;
 
   List<String> devices = []; // List to store discovered devices
 
@@ -288,6 +289,10 @@ class NetworkHelper {
               final receivedFile = File(path.join(savePath, fileName!));
               final fileBytes = await receivedFile.readAsBytes();
               final receivedHash = generateHash(fileBytes);
+
+              if (onFileReceived != null) {
+                onFileReceived!(receivedFile);
+              }
               if (verifyDataIntegrity(fileBytes, expectedHash!)) {
                 logger.i('Data integrity verified successfully.');
               } else {
