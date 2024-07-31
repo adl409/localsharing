@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:path/path.dart' as path;
 import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
+import 'dart:convert';
 
 class ReceiveFilePage extends StatefulWidget {
   const ReceiveFilePage({super.key});
@@ -14,23 +15,24 @@ class ReceiveFilePage extends StatefulWidget {
 }
 
 class _ReceiveFilePageState extends State<ReceiveFilePage> {
-  NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
+  NetworkHelper networkHelper = NetworkHelper();
   String? ipAddress;
   String? saveDirectory;
-  static const int port = 5555; // Same port as in NetworkHelper
+  static const int port = 5555;
   final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256');
+  final encrypt.IV _iv = encrypt.IV.fromLength(16);
 
   @override
   void initState() {
     super.initState();
     _getIpAddress();
-    networkHelper.startMulticasting(); // Start multicasting when page initializes
+    networkHelper.startMulticasting();
   }
 
   @override
   void dispose() {
     networkHelper.stopReceiving();
-    networkHelper.stopMulticasting(); // Stop multicasting when page is disposed
+    networkHelper.stopMulticasting();
     super.dispose();
   }
 
@@ -71,29 +73,31 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
   }
 
   Future<void> _decryptFile() async {
-    // Open file picker to select an encrypted file
     FilePickerResult? result = await FilePicker.platform.pickFiles();
     if (result != null) {
       File file = File(result.files.single.path!);
       final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
 
       try {
-        // Read the encrypted file
         Uint8List encryptedBytes = await file.readAsBytes();
-        
-        // Extract the IV from the first 16 bytes
         final iv = encrypt.IV(encryptedBytes.sublist(0, 16));
         final encryptedData = encryptedBytes.sublist(16);
 
-        // Decrypt the file
         List<int> decryptedBytes = encrypter.decryptBytes(encrypt.Encrypted(encryptedData), iv: iv);
 
-        // Save the decrypted file
-        String newPath = '${path.dirname(file.path)}/decrypted_${path.basename(file.path)}';
-        File decryptedFile = File(newPath);
-        await decryptedFile.writeAsBytes(decryptedBytes);
+        // Extract metadata (Example: metadata was in the first 100 bytes)
+        final metadataLength = 100; // Adjust as needed
+        final metadataJson = utf8.decode(decryptedBytes.sublist(0, metadataLength));
+        final metadata = json.decode(metadataJson) as Map<String, dynamic>;
 
-        // Notify the user
+        final fileName = metadata['fileName'] as String;
+        final fileExtension = metadata['fileExtension'] as String;
+
+        // Save the decrypted file
+        String newPath = '$saveDirectory/$fileName$fileExtension';
+        File decryptedFile = File(newPath);
+        await decryptedFile.writeAsBytes(decryptedBytes.sublist(metadataLength));
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('File decrypted and saved to: $newPath')),
         );

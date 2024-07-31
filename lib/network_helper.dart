@@ -137,7 +137,7 @@ class NetworkHelper {
     return actualHash == expectedHash;
   }
 
-  Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}) async {
+  Future<void> sendFile(File file, String deviceAddress, {bool encryptData = false}) async {
     try {
       final socket = await Socket.connect(deviceAddress, port);
       logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');

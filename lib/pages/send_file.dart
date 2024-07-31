@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
@@ -22,7 +24,7 @@ class _SendFilePageState extends State<SendFilePage> {
   NetworkHelper networkHelper = NetworkHelper();
 
   final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256');
-  final encrypt.IV _iv = encrypt.IV.fromLength(16);
+  final encrypt.IV _iv = encrypt.IV.fromSecureRandom(16);
 
   @override
   void initState() {
@@ -52,24 +54,33 @@ class _SendFilePageState extends State<SendFilePage> {
   Future<void> sendFile() async {
     if (selectedFile != null && selectedDevice != null) {
       try {
+        Uint8List fileBytes = await selectedFile!.readAsBytes();
+
+        // Check the length of the file bytes
+        print('File length: ${fileBytes.length}');
+
+        Uint8List dataToSend;
         if (isEncrypted) {
-          final fileBytes = await selectedFile!.readAsBytes();
           final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
           final encryptedBytes = encrypter.encryptBytes(fileBytes, iv: _iv).bytes;
-          final combinedBytes = Uint8List.fromList(_iv.bytes + encryptedBytes);
-          final tempFile = File('${selectedFile!.path}.enc');
-          await tempFile.writeAsBytes(combinedBytes);
 
-          await networkHelper.sendFile(tempFile, selectedDevice!);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Encrypted file sent: $fileName to $selectedDevice')),
-          );
+          // Append the original file name and extension
+          final originalFileNameBytes = utf8.encode(fileName!);
+          final originalFileNameLength = originalFileNameBytes.length;
+          final lengthBytes = ByteData(4)..setUint32(0, originalFileNameLength);
+          dataToSend = Uint8List.fromList(_iv.bytes + encryptedBytes + lengthBytes.buffer.asUint8List() + originalFileNameBytes);
         } else {
-          await networkHelper.sendFile(selectedFile!, selectedDevice!);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('File sent: $fileName to $selectedDevice')),
-          );
+          dataToSend = fileBytes;
         }
+
+        // Write to a temporary file for sending
+        final tempFile = File('${selectedFile!.path}.tmp');
+        await tempFile.writeAsBytes(dataToSend);
+
+        await networkHelper.sendFile(tempFile, selectedDevice!);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('File sent: $fileName to $selectedDevice')),
+        );
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to send file: $e')),
