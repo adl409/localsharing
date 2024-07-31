@@ -10,7 +10,7 @@ class EncryptionHelper {
 
   EncryptionHelper(String keyString, String ivString)
       : _key = encrypt.Key.fromUtf8(keyString),
-        _iv = encrypt.IV.fromUtf8(ivString);
+        _iv = encrypt.IV.fromBase64(ivString);
 
 
   // Encrypt data

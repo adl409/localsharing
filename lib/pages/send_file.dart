@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io';
-import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
-import 'package:encrypt/encrypt.dart' as encrypt; // Add the encrypt package for AES encryption
+import 'dart:typed_data';
+import 'package:local_file_sharing/network_helper.dart';
+import 'package:encrypt/encrypt.dart' as encrypt;
 
 class SendFilePage extends StatefulWidget {
   const SendFilePage({super.key});
@@ -13,26 +14,25 @@ class SendFilePage extends StatefulWidget {
 }
 
 class _SendFilePageState extends State<SendFilePage> {
-  String? fileName; // To store the selected file name
-  File? selectedFile; // To store the selected file
-  String? selectedDevice; // To store the selected device
-  bool isEncrypted = false; // To keep track of encryption option
+  String? fileName;
+  File? selectedFile;
+  String? selectedDevice;
+  bool isEncrypted = true;
 
-  NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
+  NetworkHelper networkHelper = NetworkHelper();
 
-  // Add your encryption key here
-  final encrypt.Key _key = encrypt.Key.fromLength(32); // Use a secure key in production
-  final encrypt.IV _iv = encrypt.IV.fromLength(16); // Initialization vector
+  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256');
+  final encrypt.IV _iv = encrypt.IV.fromLength(16);
 
   @override
   void initState() {
     super.initState();
-    networkHelper.startMulticasting(); // Start multicasting when page initializes
+    networkHelper.startMulticasting();
   }
 
   @override
   void dispose() {
-    networkHelper.stopMulticasting(); // Stop multicasting when page is disposed
+    networkHelper.stopMulticasting();
     super.dispose();
   }
 
@@ -53,12 +53,12 @@ class _SendFilePageState extends State<SendFilePage> {
     if (selectedFile != null && selectedDevice != null) {
       try {
         if (isEncrypted) {
-          // Encrypt the file before sending
           final fileBytes = await selectedFile!.readAsBytes();
-          final encrypter = encrypt.Encrypter(encrypt.AES(_key));
+          final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
           final encryptedBytes = encrypter.encryptBytes(fileBytes, iv: _iv).bytes;
+          final combinedBytes = Uint8List.fromList(_iv.bytes + encryptedBytes);
           final tempFile = File('${selectedFile!.path}.enc');
-          await tempFile.writeAsBytes(encryptedBytes);
+          await tempFile.writeAsBytes(combinedBytes);
 
           await networkHelper.sendFile(tempFile, selectedDevice!);
           ScaffoldMessenger.of(context).showSnackBar(
