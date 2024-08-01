@@ -11,6 +11,13 @@ Download Git: https://git-scm.com/
 ```bash
 git clone https://github.com/adl409/localsharing.git
 ```
+
+## Go into localsharing directory
+
+```bash
+cd localsharing
+```
+
 ## Building the App
 
 ### Android
