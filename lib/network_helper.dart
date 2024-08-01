@@ -143,7 +143,6 @@ class NetworkHelper {
       logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
 
       final fileName = path.basename(file.path);
-      final fileExtension = path.extension(file.path); // Get the file extension
       final fileSize = await file.length();
 
       // Compute SHA-256 hash of the file
@@ -152,7 +151,6 @@ class NetworkHelper {
 
       final metadata = jsonEncode({
         'fileName': fileName,
-        'fileExtension': fileExtension, // Include the file extension in metadata
         'fileSize': fileSize,
         'isEncrypted': encryptData,
         'iv': _iv.base64, // Include IV in metadata
@@ -243,7 +241,6 @@ class NetworkHelper {
       final buffer = StringBuffer();
       bool metadataProcessed = false;
       String? fileName;
-      String? fileExtension; // Add a variable to store the file extension
       int? fileSize;
       IOSink? fileSink;
       int bytesRead = 0;
@@ -265,14 +262,12 @@ class NetworkHelper {
 
               final Map<String, dynamic> metadata = jsonDecode(metadataJson);
               fileName = metadata['fileName'];
-              fileExtension = metadata['fileExtension']; // Extract the file extension from metadata
               fileSize = metadata['fileSize'];
               isEncrypted = metadata['isEncrypted'];
               iv = encrypt.IV.fromBase64(metadata['iv']);
               expectedHash = metadata['hash'];
 
-              // Append the original file extension to the file name
-              final file = File(path.join(savePath, '$fileName$fileExtension'));
+              final file = File(path.join(savePath, fileName!));
               fileSink = file.openWrite();
               buffer.clear();
             }
@@ -291,7 +286,7 @@ class NetworkHelper {
               await fileSink!.flush();
               await fileSink!.close();
               logger.i('File received and saved successfully.');
-              final receivedFile = File(path.join(savePath, '$fileName$fileExtension'));
+              final receivedFile = File(path.join(savePath, fileName!));
               final fileBytes = await receivedFile.readAsBytes();
               final receivedHash = generateHash(fileBytes);
 

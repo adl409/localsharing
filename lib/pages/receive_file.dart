@@ -84,16 +84,13 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
 
         // Extract the IV from the first 16 bytes
         final iv = encrypt.IV(encryptedBytes.sublist(0, 16));
-        final encryptedData = encryptedBytes.sublist(16, encryptedBytes.length - 4);
-
-        // Extract the original file extension from the last 4 bytes (adjust if your extension is longer/shorter)
-        String fileExtension = utf8.decode(encryptedBytes.sublist(encryptedBytes.length - 4));
+        final encryptedData = encryptedBytes.sublist(16);
 
         // Decrypt the file
         List<int> decryptedBytes = encrypter.decryptBytes(encrypt.Encrypted(encryptedData), iv: iv);
 
-        // Save the decrypted file with the original extension
-        String newPath = '${saveDirectory ?? ""}/${path.basenameWithoutExtension(file.path)}_decrypted$fileExtension';
+        // Save the decrypted file
+        String newPath = '${saveDirectory ?? ""}/${path.basenameWithoutExtension(file.path)}_decrypted${path.extension(file.path)}';
         File decryptedFile = File(newPath);
         await decryptedFile.writeAsBytes(decryptedBytes);
 
@@ -136,29 +133,10 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
                 const CircularProgressIndicator(),
               const SizedBox(height: 20),
               if (saveDirectory != null)
-                Column(
-                  children: [
-                    Text(
-                      'Saving to: $saveDirectory',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: _pickSaveDirectory,
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: Colors.blue,
-                        minimumSize: const Size(double.infinity, 50),
-                        textStyle: const TextStyle(fontSize: 18),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                      ),
-                      child: const Text('Change Save Directory'),
-                    ),
-                  ],
+                Text(
+                  'Saving to: $saveDirectory',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 18),
                 )
               else
                 ElevatedButton(
