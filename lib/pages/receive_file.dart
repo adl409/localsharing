@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:path/path.dart' as path;
 import 'package:local_file_sharing/network_helper.dart'; // Adjust the import according to your package name
@@ -80,20 +81,23 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
       try {
         // Read the encrypted file
         Uint8List encryptedBytes = await file.readAsBytes();
-        
+
         // Extract the IV from the first 16 bytes
         final iv = encrypt.IV(encryptedBytes.sublist(0, 16));
-        final encryptedData = encryptedBytes.sublist(16);
+        final encryptedData = encryptedBytes.sublist(16, encryptedBytes.length - 4);
+
+        // Extract the original file extension from the last 4 bytes (adjust if your extension is longer/shorter)
+        String fileExtension = utf8.decode(encryptedBytes.sublist(encryptedBytes.length - 4));
 
         // Decrypt the file
         List<int> decryptedBytes = encrypter.decryptBytes(encrypt.Encrypted(encryptedData), iv: iv);
 
-        // Save the decrypted file
-        String newPath = '${path.dirname(file.path)}/decrypted_${path.basename(file.path)}';
+        // Save the decrypted file with the original extension
+        String newPath = '${saveDirectory ?? ""}/${path.basenameWithoutExtension(file.path)}_decrypted$fileExtension';
         File decryptedFile = File(newPath);
         await decryptedFile.writeAsBytes(decryptedBytes);
 
-        // Notify the user
+        // Notify user
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('File decrypted and saved to: $newPath')),
         );
@@ -132,10 +136,29 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
                 const CircularProgressIndicator(),
               const SizedBox(height: 20),
               if (saveDirectory != null)
-                Text(
-                  'Saving to: $saveDirectory',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 18),
+                Column(
+                  children: [
+                    Text(
+                      'Saving to: $saveDirectory',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: _pickSaveDirectory,
+                      style: ElevatedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.blue,
+                        minimumSize: const Size(double.infinity, 50),
+                        textStyle: const TextStyle(fontSize: 18),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8.0),
+                        ),
+                      ),
+                      child: const Text('Change Save Directory'),
+                    ),
+                  ],
                 )
               else
                 ElevatedButton(
