@@ -8,7 +8,7 @@ Download Git: https://git-scm.com/
 
 Clone this Repository: https://github.com/adl409/localsharing.git
 
-## Running the app
+## Building the App
 
 ### Android
 
@@ -43,3 +43,14 @@ flutter build macos
 ```bash
 flutter build windows
 ```
+
+
+## Running the App
+
+Use this command to run the app
+
+```bash
+flutter run
+```
+
+Choose which device you want to run with in this menu
