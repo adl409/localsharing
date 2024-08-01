@@ -6,6 +6,10 @@ Download flutter and follow instruction via: https://flutter.dev/
 
 Download Git: https://git-scm.com/
 
+Download Visual Studio: https://visualstudio.microsoft.com/
+
+In Visual Studio install its toolchains
+
 ## Clone this Repository
 
 ```bash
