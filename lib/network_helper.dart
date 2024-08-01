@@ -7,7 +7,7 @@ import 'package:logger/logger.dart';
 import 'package:path/path.dart' as path;
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
-import 'package:crypto/crypto.dart'; // Add `crypto` package dependency in `pubspec.yaml`
+import 'package:crypto/crypto.dart'; // Add crypto package dependency in pubspec.yaml
 
 class NetworkHelper {
   static const String multicastAddress = '239.0.0.0';
