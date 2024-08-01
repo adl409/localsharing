@@ -6,8 +6,11 @@ Download flutter and follow instruction via: https://flutter.dev/
 
 Download Git: https://git-scm.com/
 
-Clone this Repository: https://github.com/adl409/localsharing.git
+## Clone this Repository
 
+```bash
+git clone https://github.com/adl409/localsharing.git
+```
 ## Building the App
 
 ### Android
