@@ -27,14 +27,14 @@ class _SendFilePageState extends State<SendFilePage> {
   @override
   void initState() {
     super.initState();
-    networkHelper.startMulticasting();
+    networkHelper.startDiscovery(); // Start discovery for device selection
   }
 
   @override
-  void dispose() {
-    networkHelper.stopMulticasting();
-    super.dispose();
-  }
+  // void dispose() {
+  //   networkHelper.stopDiscovery(); // Stop discovery when page is disposed
+  //   super.dispose();
+  // }
 
   void selectFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles();
@@ -209,4 +209,3 @@ class _SendFilePageState extends State<SendFilePage> {
     );
   }
 }
-
