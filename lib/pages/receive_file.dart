@@ -15,23 +15,23 @@ class ReceiveFilePage extends StatefulWidget {
 }
 
 class _ReceiveFilePageState extends State<ReceiveFilePage> {
-  final NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
+  NetworkHelper networkHelper = NetworkHelper(); // Instantiate network helper
   String? ipAddress;
   String? saveDirectory;
-  static const int port = 8080; // Same port as in NetworkHelper
+  static const int port = 5555; // Same port as in NetworkHelper
   final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256');
 
   @override
   void initState() {
     super.initState();
     _getIpAddress();
-    networkHelper.startDiscovery(); // Start discovery when page initializes
+    networkHelper.startMulticasting(); // Start multicasting when page initializes
   }
 
   @override
   void dispose() {
     networkHelper.stopReceiving();
-    super.dispose();
+    networkHelper.stopMulticasting(); // Stop multicasting when page is disposed
     super.dispose();
   }
 
@@ -184,3 +184,4 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
     );
   }
 }
+
