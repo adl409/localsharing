@@ -10,11 +10,10 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:crypto/crypto.dart';
 
 class NetworkHelper {
-  static const String multicastAddress = '224.0.0.1'; // Multicast address
-  static const int multicastPort = 5555; // Port for multicast communication
+  static const int unicastPort = 5555; // Port for unicast communication
 
-  RawDatagramSocket? _multicastSocket;
-  bool _isMulticastRunning = false;
+  RawDatagramSocket? _unicastSocket;
+  bool _isUnicastRunning = false;
 
   final _devicesController = StreamController<List<String>>.broadcast();
   Stream<List<String>> get devicesStream => _devicesController.stream;
@@ -31,32 +30,30 @@ class NetworkHelper {
   final encrypt.IV _iv = encrypt.IV.fromLength(16);
 
   Future<void> startDiscovery() async {
-    // Start multicast listening
-    await _startMulticastListening();
+    // Start unicast listening
+    await _startUnicastListening();
 
-    // Send multicast announcement
-    await _sendMulticastAnnouncement();
+    // Send unicast announcement
+    await _sendUnicastAnnouncement();
   }
 
-  Future<void> _startMulticastListening() async {
-    if (_isMulticastRunning) return;
+  Future<void> _startUnicastListening() async {
+    if (_isUnicastRunning) return;
 
     try {
       final interface = await _networkInfo.getWifiIP();
-      final address = InternetAddress(multicastAddress, type: InternetAddressType.IPv4);
-      _multicastSocket = await RawDatagramSocket.bind(
+      _unicastSocket = await RawDatagramSocket.bind(
         InternetAddress.anyIPv4, 
-        multicastPort,
+        unicastPort,
         reuseAddress: true,
       );
-      _multicastSocket!.joinMulticast(address);
 
-      _isMulticastRunning = true;
-      logger.i('Multicast listener started on $multicastAddress:$multicastPort');
+      _isUnicastRunning = true;
+      logger.i('Unicast listener started on port $unicastPort');
 
-      _multicastSocket!.listen((event) {
+      _unicastSocket!.listen((event) {
         if (event == RawSocketEvent.read) {
-          final datagram = _multicastSocket!.receive();
+          final datagram = _unicastSocket!.receive();
           if (datagram != null) {
             final message = String.fromCharCodes(datagram.data).trim();
             if (message.startsWith('DEVICE:')) {
@@ -70,37 +67,42 @@ class NetworkHelper {
         }
       });
     } catch (e) {
-      logger.e('Error starting multicast listener: $e');
+      logger.e('Error starting unicast listener: $e');
     }
   }
 
-  Future<void> _sendMulticastAnnouncement() async {
+  Future<void> _sendUnicastAnnouncement() async {
     try {
       final message = 'DEVICE:${await _networkInfo.getWifiIP()}';
-      final address = InternetAddress(multicastAddress, type: InternetAddressType.IPv4);
       final socket = await RawDatagramSocket.bind(
         InternetAddress.anyIPv4, 
         0, // Use any available port
         reuseAddress: true,
       );
-      socket.joinMulticast(address);
 
-      socket.send(Uint8List.fromList(message.codeUnits), address, multicastPort);
-      logger.i('Multicast announcement sent: $message');
+      // You need to know the addresses of devices in the other subnet
+      // Here we assume a list of known addresses in another subnet
+      List<String> knownAddresses = ['10.45.0.18', '10.45.0.28', '10.45.0.24', '10.45.0.14', '10.45.0.10', '10.45.0.4', '10.13.16.191']; // Replace with actual addresses
+
+      for (String address in knownAddresses) {
+        final targetAddress = InternetAddress(address);
+        socket.send(Uint8List.fromList(message.codeUnits), targetAddress, unicastPort);
+        logger.i('Unicast announcement sent to $address: $message');
+      }
     } catch (e) {
-      logger.e('Error sending multicast announcement: $e');
+      logger.e('Error sending unicast announcement: $e');
     }
   }
 
   Future<void> stopDiscovery() async {
-    _isMulticastRunning = false;
-    _multicastSocket?.close();
-    logger.i('Stopped multicast listening');
+    _isUnicastRunning = false;
+    _unicastSocket?.close();
+    logger.i('Stopped unicast listening');
   }
 
   Future<void> sendFile(File file, String deviceAddress, {bool encryptData = false}) async {
     try {
-      final socket = await Socket.connect(deviceAddress, multicastPort);
+      final socket = await Socket.connect(deviceAddress, unicastPort);
       logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
 
       final fileName = path.basename(file.path);
@@ -167,7 +169,7 @@ class NetworkHelper {
     }
 
     try {
-      final serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, multicastPort);
+      final serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, unicastPort);
       logger.i('Server started on ${serverSocket.address.address}:${serverSocket.port}');
 
       serverSocket.listen((Socket client) {
