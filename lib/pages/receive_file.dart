@@ -72,44 +72,47 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
     }
   }
 
-  Future<void> _decryptFile() async {
-    // Open file picker to select an encrypted file
-    FilePickerResult? result = await FilePicker.platform.pickFiles();
-    if (result != null) {
-      File file = File(result.files.single.path!);
-      final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
+Future<void> _decryptFile() async {
+  // Open file picker to select an encrypted file
+  FilePickerResult? result = await FilePicker.platform.pickFiles();
+  if (result != null) {
+    File file = File(result.files.single.path!);
+    final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
 
-      try {
-        // Read the encrypted file
-        Uint8List encryptedBytes = await file.readAsBytes();
+    try {
+      // Read the encrypted file
+      Uint8List encryptedBytes = await file.readAsBytes();
 
-        // Extract the IV from the first 16 bytes
-        final iv = encrypt.IV(encryptedBytes.sublist(0, 16));
-        final encryptedData = encryptedBytes.sublist(16);
+      // Extract the IV from the first 16 bytes
+      final iv = encrypt.IV(encryptedBytes.sublist(0, 16));
+      final encryptedData = encryptedBytes.sublist(16);
 
-        // Decrypt the file
-        List<int> decryptedBytes = encrypter.decryptBytes(encrypt.Encrypted(encryptedData), iv: iv);
+      // Decrypt the file
+      List<int> decryptedBytes = encrypter.decryptBytes(encrypt.Encrypted(encryptedData), iv: iv);
 
-        // Save the decrypted file
-        String newPath = '${saveDirectory ?? ""}/${path.basenameWithoutExtension(file.path)}_decrypted${path.extension(file.path)}';
-        File decryptedFile = File(newPath);
-        await decryptedFile.writeAsBytes(decryptedBytes);
+      // Save the decrypted file
+      String originalFileName = path.basenameWithoutExtension(file.path);
+      String originalExtension = path.extension(file.path);
+      String newPath = '${saveDirectory ?? ""}/$originalFileName$originalExtension';
+      File decryptedFile = File(newPath);
+      await decryptedFile.writeAsBytes(decryptedBytes);
 
-        // Notify user
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('File decrypted and saved to: $newPath')),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error decrypting file: $e')),
-        );
-      }
-    } else {
+      // Notify user
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No file selected.')),
+        SnackBar(content: Text('File decrypted and saved to: $newPath')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error decrypting file: $e')),
       );
     }
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No file selected.')),
+    );
   }
+}
+
 
   @override
   Widget build(BuildContext context) {
