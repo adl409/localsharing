@@ -7,145 +7,105 @@ import 'package:logger/logger.dart';
 import 'package:path/path.dart' as path;
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
-import 'package:crypto/crypto.dart'; // Add crypto package dependency in pubspec.yaml
+import 'package:crypto/crypto.dart';
 
 class NetworkHelper {
-  static const String multicastAddress = '239.0.0.0';
-  static const int port = 5555;
+  static const String multicastAddress = '224.0.0.1'; // Multicast address
+  static const int multicastPort = 5555; // Port for multicast communication
 
-  RawDatagramSocket? _socket;
-  bool _isClosed = true;
+  RawDatagramSocket? _multicastSocket;
+  bool _isMulticastRunning = false;
 
   final _devicesController = StreamController<List<String>>.broadcast();
   Stream<List<String>> get devicesStream => _devicesController.stream;
   Function(File)? onFileReceived;
 
-  List<String> devices = []; // List to store discovered devices
+  List<String> devices = [];
 
   Logger logger = Logger();
   final NetworkInfo _networkInfo = NetworkInfo();
 
-  String? _saveDirectory; // Variable to store selected save directory
+  String? _saveDirectory;
 
-  // Hardcoded AES key and IV
-  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256'); // 256-bit key for AES
-  final encrypt.IV _iv = encrypt.IV.fromLength(16); // 128-bit IV for AES
+  final encrypt.Key _key = encrypt.Key.fromUtf8('32-character-long-key-for-aes256');
+  final encrypt.IV _iv = encrypt.IV.fromLength(16);
 
-  Future<void> startMulticasting() async {
+  Future<void> startDiscovery() async {
+    // Start multicast listening
+    await _startMulticastListening();
+
+    // Send multicast announcement
+    await _sendMulticastAnnouncement();
+  }
+
+  Future<void> _startMulticastListening() async {
+    if (_isMulticastRunning) return;
+
     try {
-      String? wifiIP = await _networkInfo.getWifiIP();
-      String? wifiName = await _networkInfo.getWifiName();
-      logger.i('WiFi Name: $wifiName, IP: $wifiIP');
-
-      _socket = await RawDatagramSocket.bind(
-        InternetAddress.anyIPv4,
-        port,
+      final interface = await _networkInfo.getWifiIP();
+      final address = InternetAddress(multicastAddress, type: InternetAddressType.IPv4);
+      _multicastSocket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4, 
+        multicastPort,
         reuseAddress: true,
       );
+      _multicastSocket!.joinMulticast(address);
 
-      // Join the multicast group
-      _socket!.joinMulticast(InternetAddress(multicastAddress));
-      logger.i('Joined multicast group $multicastAddress');
+      _isMulticastRunning = true;
+      logger.i('Multicast listener started on $multicastAddress:$multicastPort');
 
-      _socket!.listen(handleData); // Listen for incoming datagrams
-      _isClosed = false;
-      _sendDiscoveryPacket();
-
-      logger.i('Multicasting started successfully');
-    } catch (e) {
-      logger.e('Error starting multicast: $e');
-      _socket?.close();
-      _isClosed = true;
-    }
-  }
-
-  void stopMulticasting() {
-    _isClosed = true;
-    _socket?.close();
-    _devicesController.close();
-    logger.i('Multicasting stopped');
-  }
-
-  void _sendDiscoveryPacket() {
-    Timer.periodic(Duration(seconds: 5), (timer) {
-      if (_isClosed) {
-        timer.cancel();
-      } else {
-        try {
-          // Convert String 'DISCOVER' to Uint8List and send multicast packet
-          Uint8List data = Uint8List.fromList('RESPONSE'.codeUnits);
-          _socket!.send(data, InternetAddress(multicastAddress), port);
-        } catch (e) {
-          logger.e('Error sending multicast packet: $e');
-        }
-      }
-    });
-  }
-
-  void listenForDiscovery() async {
-    try {
-      logger.i('Starting discovery listener...');
-      RawDatagramSocket.bind(InternetAddress.anyIPv4, port).then((socket) {
-        _socket = socket;
-        logger.i('Socket bound to ${socket.address.address}:${socket.port}');
-
-        socket.joinMulticast(InternetAddress(multicastAddress));
-        logger.i('Joined multicast group $multicastAddress');
-
-        socket.listen((RawSocketEvent event) {
-          if (event == RawSocketEvent.read) {
-            Datagram? datagram = socket.receive();
-            if (datagram != null) {
-              String message = String.fromCharCodes(datagram.data);
-              if (message.trim() == 'RESPONSE') {
-                socket.send(Uint8List.fromList('RESPONSE'.codeUnits), datagram.address, datagram.port);
+      _multicastSocket!.listen((event) {
+        if (event == RawSocketEvent.read) {
+          final datagram = _multicastSocket!.receive();
+          if (datagram != null) {
+            final message = String.fromCharCodes(datagram.data).trim();
+            if (message.startsWith('DEVICE:')) {
+              final deviceAddress = message.substring('DEVICE:'.length);
+              if (!devices.contains(deviceAddress)) {
+                devices.add(deviceAddress);
+                _devicesController.add(devices.toList());
               }
             }
           }
-        });
+        }
       });
     } catch (e) {
-      logger.e('Error listening for discovery: $e');
+      logger.e('Error starting multicast listener: $e');
     }
   }
 
-  void handleData(RawSocketEvent event) {
-    if (event == RawSocketEvent.read) {
-      Datagram? datagram = _socket!.receive();
-      if (datagram != null) {
-        String message = String.fromCharCodes(datagram.data);
-        if (message.trim() == 'RESPONSE') {
-          String deviceAddress = datagram.address.address;
-          if (!devices.contains(deviceAddress)) {
-            devices.add(deviceAddress);
-            _devicesController.add(devices.toList()); // Notify listeners
-          }
-        }
-      }
+  Future<void> _sendMulticastAnnouncement() async {
+    try {
+      final message = 'DEVICE:${await _networkInfo.getWifiIP()}';
+      final address = InternetAddress(multicastAddress, type: InternetAddressType.IPv4);
+      final socket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4, 
+        0, // Use any available port
+        reuseAddress: true,
+      );
+      socket.joinMulticast(address);
+
+      socket.send(Uint8List.fromList(message.codeUnits), address, multicastPort);
+      logger.i('Multicast announcement sent: $message');
+    } catch (e) {
+      logger.e('Error sending multicast announcement: $e');
     }
   }
 
-  // Calculate SHA-256 hash of data
-  String generateHash(Uint8List data) {
-    final digest = sha256.convert(data);
-    return digest.toString();
-  }
-
-  // Verify data integrity by comparing hashes
-  bool verifyDataIntegrity(Uint8List data, String expectedHash) {
-    final actualHash = generateHash(data);
-    return actualHash == expectedHash;
+  Future<void> stopDiscovery() async {
+    _isMulticastRunning = false;
+    _multicastSocket?.close();
+    logger.i('Stopped multicast listening');
   }
 
   Future<void> sendFile(File file, String deviceAddress, {bool encryptData = false}) async {
     try {
-      final socket = await Socket.connect(deviceAddress, port);
+      final socket = await Socket.connect(deviceAddress, multicastPort);
       logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
 
       final fileName = path.basename(file.path);
       final fileSize = await file.length();
 
-      // Compute SHA-256 hash of the file
       final fileBytes = await file.readAsBytes();
       final fileHash = generateHash(fileBytes);
 
@@ -153,8 +113,8 @@ class NetworkHelper {
         'fileName': fileName,
         'fileSize': fileSize,
         'isEncrypted': encryptData,
-        'iv': _iv.base64, // Include IV in metadata
-        'hash': fileHash // Include hash in metadata
+        'iv': _iv.base64,
+        'hash': fileHash
       });
       socket.write('$metadata\n');
       await socket.flush();
@@ -199,22 +159,6 @@ class NetworkHelper {
     }
   }
 
-  ServerSocket? _serverSocket;
-
-  Future<String?> pickSaveDirectory() async {
-    if (_saveDirectory != null) {
-      return _saveDirectory;
-    }
-
-    String? directoryPath = await FilePicker.platform.getDirectoryPath();
-    if (directoryPath == null) {
-      logger.w('Directory selection was canceled');
-    } else {
-      _saveDirectory = directoryPath;
-    }
-    return _saveDirectory;
-  }
-
   Future<void> startReceiving() async {
     String? savePath = await pickSaveDirectory();
     if (savePath == null) {
@@ -223,10 +167,10 @@ class NetworkHelper {
     }
 
     try {
-      _serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
-      logger.i('Server started on ${_serverSocket!.address.address}:${_serverSocket!.port}');
+      final serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, multicastPort);
+      logger.i('Server started on ${serverSocket.address.address}:${serverSocket.port}');
 
-      _serverSocket!.listen((Socket client) {
+      serverSocket.listen((Socket client) {
         handleClientConnection(client, savePath);
       });
     } catch (e) {
@@ -314,7 +258,33 @@ class NetworkHelper {
   }
 
   Future<void> stopReceiving() async {
-    await _serverSocket?.close();
+    // Placeholder: Implement any necessary logic to stop receiving
     logger.i('Stopped receiving files');
+  }
+
+  Future<String?> pickSaveDirectory() async {
+    if (_saveDirectory != null) {
+      return _saveDirectory;
+    }
+
+    String? directoryPath = await FilePicker.platform.getDirectoryPath();
+    if (directoryPath == null) {
+      logger.w('Directory selection was canceled');
+    } else {
+      _saveDirectory = directoryPath;
+    }
+    return _saveDirectory;
+  }
+
+  // Calculate SHA-256 hash of data
+  String generateHash(Uint8List data) {
+    final digest = sha256.convert(data);
+    return digest.toString();
+  }
+
+  // Verify data integrity by comparing hashes
+  bool verifyDataIntegrity(Uint8List data, String expectedHash) {
+    final actualHash = generateHash(data);
+    return actualHash == expectedHash;
   }
 }

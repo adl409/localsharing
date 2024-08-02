@@ -27,12 +27,12 @@ class _SendFilePageState extends State<SendFilePage> {
   @override
   void initState() {
     super.initState();
-    networkHelper.startMulticasting();
+    networkHelper.startDiscovery();
   }
 
   @override
   void dispose() {
-    networkHelper.stopMulticasting();
+    networkHelper.stopDiscovery();
     super.dispose();
   }
 
