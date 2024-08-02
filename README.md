@@ -40,11 +40,15 @@ flutter build appbundle
 
 ### iOS
 
+To download of iOS you need an apple device with xCode
+
 ```bash
 flutter build ipa
 ```
 
 ### macOS
+
+To download of macOS you need an apple device with xCode
 
 ```bash
 flutter build macos
