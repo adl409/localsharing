@@ -57,15 +57,12 @@ class _SendFilePageState extends State<SendFilePage> {
           final encrypter = encrypt.Encrypter(encrypt.AES(_key, mode: encrypt.AESMode.cbc, padding: 'PKCS7'));
           final encryptedBytes = encrypter.encryptBytes(fileBytes, iv: _iv).bytes;
           final combinedBytes = Uint8List.fromList(_iv.bytes + encryptedBytes);
-
-          // Save encrypted file with .enc extension
-          final encryptedFilePath = '${selectedFile!.path}.enc';
-          final tempFile = File(encryptedFilePath);
+          final tempFile = File('${selectedFile!.path}.enc');
           await tempFile.writeAsBytes(combinedBytes);
 
           await networkHelper.sendFile(tempFile, selectedDevice!);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Encrypted file sent: ${fileName!}.enc to $selectedDevice')),
+            SnackBar(content: Text('Encrypted file sent: $fileName to $selectedDevice')),
           );
         } else {
           await networkHelper.sendFile(selectedFile!, selectedDevice!);
