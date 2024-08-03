@@ -100,7 +100,7 @@ class NetworkHelper {
     logger.i('Stopped unicast listening');
   }
 
-  Future<void> sendFile(File file, String deviceAddress, {bool encryptData = false}) async {
+  Future<void> sendFile(File file, String deviceAddress, {bool encryptData = true}) async {
     try {
       final socket = await Socket.connect(deviceAddress, unicastPort);
       logger.i('Connected to: ${socket.remoteAddress.address}:${socket.remotePort}');
