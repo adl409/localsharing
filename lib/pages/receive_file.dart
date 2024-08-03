@@ -90,10 +90,10 @@ Future<void> _decryptFile() async {
       // Decrypt the file
       List<int> decryptedBytes = encrypter.decryptBytes(encrypt.Encrypted(encryptedData), iv: iv);
 
-      // Save the decrypted file with the original name
-      String originalFileName = path.basenameWithoutExtension(file.path); // Remove any .enc suffix if present
-      String originalFileExtension = path.extension(file.path);
-      String newPath = '${saveDirectory ?? ""}/$originalFileName$originalFileExtension';
+      // Save the decrypted file with a prefix 'decrypted_'
+      String originalFileName = path.basenameWithoutExtension(file.path); // Get file name without extension
+      String originalFileExtension = path.extension(file.path); // Get file extension
+      String newPath = '${saveDirectory ?? ""}/decrypted_$originalFileName$originalFileExtension'; // Prefix with 'decrypted_'
       File decryptedFile = File(newPath);
       await decryptedFile.writeAsBytes(decryptedBytes);
 
@@ -112,6 +112,7 @@ Future<void> _decryptFile() async {
     );
   }
 }
+
 
 
 
