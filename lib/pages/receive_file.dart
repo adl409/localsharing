@@ -91,7 +91,7 @@ class _ReceiveFilePageState extends State<ReceiveFilePage> {
         List<int> decryptedBytes = encrypter.decryptBytes(encrypt.Encrypted(encryptedData), iv: iv);
 
         // Save the decrypted file
-        String newPath = '${saveDirectory ?? ""}/${path.basenameWithoutExtension(file.path)}${path.extension(file.path)}';
+        String newPath = '${saveDirectory ?? ""}/${path.basenameWithoutExtension(file.path)}_decrypted${path.extension(file.path)}';
         File decryptedFile = File(newPath);
         await decryptedFile.writeAsBytes(decryptedBytes);
 
