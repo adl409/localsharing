@@ -1,5 +1,7 @@
 # local_file_sharing
 
+## Introduction
+This Application was built to be used to share file via 5g network seamlessly in this Readme is instruction on how to run the project on different devices.
 ## How To Install
 
 Download flutter and follow instruction via: https://flutter.dev/
